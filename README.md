@@ -1,23 +1,248 @@
--- [[ ABC SUPER GUI - ENCRYPTED PROTECTION ]] --
--- Protected by Lua Obfuscator Logic
+-- [[ ABC SUPER GUI - FINAL MILITARY DELTA EDITION - MODDED (NO KEY) ]] --
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 
-local _0x5f2a = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
-function _decode(data)
-    data = string.gsub(data, '[^'.._0x5f2a..'=]', '')
-    return (data:gsub('.', function(x)
-        if (x == '=') then return '' end
-        local r, f = '', (_0x5f2a:find(x) - 1)
-        for i = 6, 1, -1 do r = r .. (f % 2^i - f % 2^(i-1) > 0 and '1' or '0') end
-        return r;
-    end):gsub('%d%d%d%d%d%d%d%d', function(x)
-        local c = 0
-        for i = 1, 8 do c = c + (x:sub(i, i) == '1' and 2^(8 - i) or 0) end
-        return string.char(c)
-    end))
+local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
+ScreenGui.Name = "ABC_SUPER_GUI"
+
+-- Rainbow Function
+local function MakeRainbow(obj, property)
+    if property == "Background" then
+        if obj:FindFirstChild("RainbowGrad") then obj.RainbowGrad:Destroy() end
+        local grad = Instance.new("UIGradient", obj)
+        grad.Name = "RainbowGrad"
+        grad.Color = ColorSequence.new{
+            ColorSequenceKeypoint.new(0, Color3.fromRGB(255,0,0)),
+            ColorSequenceKeypoint.new(0.2, Color3.fromRGB(255,255,0)),
+            ColorSequenceKeypoint.new(0.4, Color3.fromRGB(0,255,0)),
+            ColorSequenceKeypoint.new(0.6, Color3.fromRGB(0,255,255)),
+            ColorSequenceKeypoint.new(0.8, Color3.fromRGB(0,0,255)),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB(255,0,255))
+        }
+        spawn(function()
+            while obj.Parent and grad.Parent do
+                grad.Rotation += 2
+                task.wait(0.02)
+            end
+        end)
+    elseif property == "Text" then
+        spawn(function()
+            while obj.Parent do
+                for i=0,1,0.01 do
+                    obj.TextColor3 = Color3.fromHSV(i,1,1)
+                    task.wait(0.02)
+                end
+            end
+        end)
+    elseif property == "Stroke" then
+        local stroke = obj:FindFirstChildOfClass("UIStroke") or Instance.new("UIStroke", obj)
+        stroke.Thickness = 3
+        local grad = Instance.new("UIGradient", stroke)
+        grad.Color = ColorSequence.new{
+            ColorSequenceKeypoint.new(0, Color3.fromRGB(255,0,0)),
+            ColorSequenceKeypoint.new(0.2, Color3.fromRGB(255,255,0)),
+            ColorSequenceKeypoint.new(0.4, Color3.fromRGB(0,255,0)),
+            ColorSequenceKeypoint.new(0.6, Color3.fromRGB(0,255,255)),
+            ColorSequenceKeypoint.new(0.8, Color3.fromRGB(0,0,255)),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB(255,0,255))
+        }
+        spawn(function()
+            while obj.Parent and grad.Parent do
+                grad.Rotation += 2
+                task.wait(0.02)
+            end
+        end)
+    end
 end
 
--- الكود الخاص بك مشفر بالكامل بالأسفل
-local _payload = "LS0gW1sgQUJDIFNVUEVSIEdVSSAtIEZJTkFMIE1JTElUQVJZIERFTFRBIEVESVRJT04gLSBNT0RERUQgKE5PIEtFWSkgXV0gLS0KbG9jYWwgVHdlZW5TZXJ2aWNlID0gZ2FtZTpHZXRTZXJ2aWNlKCJUd2VlblNlcnZpY2UiKQpsb2NhbCBVc2VySW5wdXRTZXJ2aWNlID0gZ2FtZTpHZXRTZXJ2aWNlKCJVc2VySW5wdXRTZXJ2aWNlIikKbG9jYWwgUGxheWVycyA9IGdhbWU6R2V0U2VydmljZSgiUGxheWVycyIpCmxvY2FsIFJ1blNlcnZpY2UgPSBnYW1lOkdldFNlcnZpY2UoIlJ1blNlcnZpY2UiKQoKbG9jYWwgU2NyZWVuR3VpID0gSW5zdGFuY2UubmV3KCJTY3JlZW5HdWkiLCBnYW1lLkNvcmVHdWkpClNjcmVlbkd1aS5OYW1lID0gIkFCQ19TVVBFUl9HVUkiCgotLSBSYWluYm93IEZ1bmN0aW9uCmxvY2FsIGZ1bmN0aW9uIE1ha2VSYWluYm93KG9iaiwgcHJvcGVydHkpCiAgICBpZiBwcm9wZXJ0eSA9PSAiQmFja2dyb3VuZCIgdGhlbgogICAgICAgIGlmIG9iajpGaW5kRmlyc3RDaGlsZCgiUmFpbmJvd0dyYWQiKSB0aGVuIG9iai5SYWluYm93R3JhZDpEZXN0cm95KCkgZW5kCiAgICAgICAgbG9jYWwgZ3JhZCA9IEluc3RhbmNlLm5ldygiVUlHcmFkaWVudCIsIG9iaikKICAgICAgICBncmFkLk5hbWUgPSAiUmFpbmJvd0dyYWQiCiAgICAgICAgZ3JhZC5Db2xvciA9IENvbG9yU2VxdWVuY2UubmV3ewogICAgICAgICAgICBDb2xvclNlcXVlbmNlS2V5cG9pbnQubmV3KDAsIENvbG9yMy5mcm9tUkdCKDI1NSwwLDApKSwKICAgICAgICAgICAgQ29sb3JTZXF1ZW5jZUtleXBvaW50Lm5ldygwLjIsIENvbG9yMy5mcm9tUkdCKDI1NSwyNTUsMCkpLAogICAgICAgICAgICBDb2xvclNlcXVlbmNlS2V5cG9pbnQubmV3KDAuNCwgQ29sb3IzLmZyb21SR0IoMCwyNTUsMCkpLAogICAgICAgICAgICBDb2xvclNlcXVlbmNlS2V5cG9pbnQubmV3KDAuNiwgQ29sb3IzLmZyb21SR0IoMCwyNTUsMjU1KSksCiAgICAgICAgICAgIENvbG9yU2VxdWVuY2UtLW9ic2N1cmVkIGNvZGUK" -- (باقي البيانات مشفرة هنا)
+-- Drag Function
+local function Drag(frame)
+    local dragging, startPos, startFramePos
+    frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            startPos = input.Position
+            startFramePos = frame.Position
+        end
+    end)
+    frame.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local delta = input.Position - startPos
+            frame.Position = UDim2.new(startFramePos.X.Scale, startFramePos.X.Offset + delta.X, startFramePos.Y.Scale, startFramePos.Y.Offset + delta.Y)
+        end
+    end)
+end
 
--- تشغيل السكربت من الذاكرة
-local _exec = loadstring(_decode("LS0gW1sgQUJDIFNVUEVSIEdVSSAtIEZJTkFMIE1JTElUQVJZIERFTFRBIEVESVRJT04gXV0gLS0KbG9jYWwgVHdlZW5TZXJ2aWNlID0gZ2FtZTpHZXRTZXJ2aWNlKCJUd2VlblNlcnZpY2UiKQpsb2NhbCBVc2VySW5wdXRTZXJ2aWNlID0gZ2FtZTpHZXRTZXJ2aWNlKCJVc2VySW5wdXRTZXJ2aWNlIikKbG9jYWwgUGxheWVycyA9IGdhbWU6R2V0U2VydmljZSgiUGxheWVycyIpCmxvY2FsIFJ1blNlcnZpY2UgPSBnYW1lOkdldFNlcnZpY2UoIlJ1blNlcnZpY2UiKQpsb2NhbCBTY3JlZW5HdWkgPSBJbnN0YW5jZS5uZXcoIlNjcmVlbkd1aSIsIGdhbWUuQ29yZUd1aSkKU2NyZWVuR3VpLk5hbWUgPSAiQUJDX1NVUEVSX0dVSSIKbG9jYWwgZnVuY3Rpb24gTWFrZVJhaW5ib3cob2JqLCBwcm9wZXJ0eSkgaWYgcHJvcGVydHkgPT0gIkJhY2tncm91bmQiIHRoZW4gaWYgb2JqOkZpbmRGaXJzdENoaWxkKCJSYWluYm93R3JhZCIpIHRoZW4gb2JqLlJhaW5ib3dHcmFkOkRlc3Ryb3koKSBlbmQgbG9jYWwgZ3JhZCA9IEluc3RhbmNlLm5ldygiVUlHcmFkaWVudCIsIG9iaikgZ3JhZC5OYW1lID0gIlJhaW5ib3dHcmFkIiBncmFkLkNvbG9yID0gQ29sb3JTZXF1ZW5jZS5uZXd7Q29sb3JTZXF1ZW5jZUtleXBvaW50Lm5ldygwLCBDb2xvclMuZnJvbVJHQigyNTUsMCwwKSksIENvbG9yU2VxdWVuY2VLZXlwb2lbnQubmV3KDAuMiwgQ29sb3IzLmZyb21SR0IoMjU1LDI1NSwwKSksIENvbG9yU2VxdWVuY2VLZXlwb2lbnQubmV3KDAuNCwgQ29sb3IzLmZyb21SR0IoMCwyNTUsMCkpLCBDb2xvclNlcXVlbmNlS2V5cG9pbnQubmV3KDAuNiwgQ29sb3IzLmZyb21SR0IoMCwyNTUsMjU1KSksIENvbG9yU2VxdWVuY2VLZXlwb2lbnQubmV3KDAuOCwgQ29sb3IzLmZyb21SR0IoMCwwLDI1NSkpLCBDb2xvclNlcXVlbmNlS2V5cG9pbnQubmV3KDEsIENvbG9yMy5mcm9tUkdCKDI1NSwwLDI1NSkpIH0gc3Bhd24oZnVuY3Rpb24oKSB3aGlsZSBvYmouUGFyZW50IGFuZCBncmFkLlBhcmVudCBkbyBncmFkLlJvdGF0aW9uICs9IDIgdGFzay53YWl0KDAuMDIpIGVuZCBlbmQpIGVsc2VpZiBwcm9wZXJ0eSA9PSAiVGV4dCIgdGhlbiBzcGF3bihmdW5jdGlvbigpIHdoaWxlIG9iai5QYXJlbnQgZG8gZm9yIGk9MCwxLDAuMDEgZG8gb2JqLlRleHRDb2xvclIzID0gQ29sb3IzLmZyb21IU1YoaSwxLDEpIHRhc2sud2FpdCgwLjAyKSBlbmQgZW5kIGVuZCkgZWxzZWlmIHByb3BlcnR5ID09ICJTdHJva2UiIHRoZW4gbG9jYWwgc3Ryb2tlID0gb2JqOkZpbmRGaXJzdENoaWxkT2ZDbGFzcygiVUlTdHJva2UiKSBvciBJbnN0YW5jZS5uZXcoIlVJU3Ryb2tlIiwgb2JqKSBzdHJva2UuVGhpY2tuZXNzID0gMyBsb2NhbCBncmFkID0gSW5zdGFuY2UubmV3KCJVSUdyYWRpZW50Iiwgc3Ryb2tlKSBncmFkLkNvbG9yID0gQ29sb3JTZXF1ZW5jZS5uZXd7Q29sb3JTZXF1ZW5jZUtleXBvaW50Lm5ldygwLCBDb2xvclMuZnJvbVJHQigyNTUsMCwwKSksIENvbG9yU2VxdWVuY2VLZXlwb2lbnQubmV3KDAuMiwgQ29sb3IzLmZyb21SR0IoMjU1LDI1NSwwKSksIENvbG9yU2VxdWVuY2VLZXlwb2lbnQubmV3KDAuNCwgQ29sb3IzLmZyb21SR0IoMCwyNTUsMCkpLCBDb2xvclNlcXVlbmNlS2V5cG9pbnQubmV3KDAuNiwgQ29sb3IzLmZyb21SR0IoMCwyNTUsMjU1KSksIENvbG9yU2VxdWVuY2VLZXlwb2lbnQubmV3KDAuOCwgQ29sb3IzLmZyb21SR0IoMCwwLDI1NSkpLCBDb2xvclNlcXVlbmNlS2V5cG9pbnQubmV3KDEsIENvbG9yMy5mcm9tUkdCKDI1NSwwLDI1NSkpIH0gc3Bhd24oZnVuY3Rpb24oKSB3aGlsZSBvYmouUGFyZW50IGFuZCBncmFkLlBhcmVudCBkbyBncmFkLlJvdGF0aW9uICs9IDIgdGFzay53YWl0KDAuMDIpIGVuZCBlbmQpIGVuZCBlbmQgbG9jYWwgZnVuY3Rpb24gRHJhZyhmcmFtZSkgbG9jYWwgZHJhZ2dpbmcsIHN0YXJ0UG9zLCBzdGFydEZyYW1lUG9zIGZyYW1lLklucHV0QmVnYW46Q29ubmVjdChmdW5jdGlvbihpbnB1dCkgaWYgaW5wdXQuVXNlcklucHV0VHlwZSA9PSBFbnVtLlVzZXJJbnB1dFR5cGUuTW91c2VCdXR0b24xIHRoZW4gZHJhZ2dpbmcgPSB0cnVlIHN0YXJ0UG9zID0gaW5wdXQuUG9zaXRpb24gc3RhcnRGcmFtZVBvcyA9IGZyYW1lLlBvc2l0aW9uIGVuZCBlbmQpIGZyYW1lLklucHV0RW5kZWQ6Q29ubmVjdChmdW5jdGlvbihpbnB1dCkgaWYgaW5wdXQuVXNlcklucHV0VHlwZSA9PSBFbnVtLlVzZXJJbnB1dFR5cGUuTW91c2VCdXR0b24xIHRoZW4gZHJhZ2dpbmcgPSBmYWxzZSBlbmQgZW5kKSBVc2VySW5wdXRTZXJ2aWNlLklucHV0Q2hhbmdlZDpDb25uZWN0KGZ1bmN0aW9uKGlucHV0KSBpZiBkcmFnZ2luZyBhbmQgaW5wdXQuVXNlcklucHV0VHlwZSA9PSBFbnVtLlVzZXJJbnB1dFR5cGUuTW91c2VNb3ZlbWVudCB0aGVuIGxvY2FsIGRlbHRhID0gaW5wdXQuUG9zaXRpb24gLSBzdGFydFBvcyBmcmFtZS5Qb3NpdGlvbiA9IFVETTIubmV3KHN0YXJ0RnJhbWVQb3MuWC5TY2FsZSwgc3RhcnRGcmFtZVBvcy5YLk9mZnNldCArIGRlbHRhLlgsIHN0YXJ0RnJhbWVQb3MuWS5TY2FsZSwgc3RhcnRGcmFtZVBvcy5ZLk9mZnNldCArIGRlbHRhLlkpIGVuZCBlbmQpIGVuZCBsb2NhbCBNYWluID0gSW5zdGFuY2UubmV3KCJGcmFtZSIsIFNjcmVlbkd1aSkgTWFpbi5TaXplID0gVURNMi5uZXcoMCw1MDAsMCw0MDApIE1haW4uUG9zaXRpb24gPSBVRE0yLm5ldygwLjUsLTI1MCwwLjUsLTIwMCkgTWFpbi5WaXNpYmxlID0gdHJ1ZSBNYWtlUmFpbmJvdyhNYWluLCJCYWNrZ3JvdW5kIikgTWFrZVJhaW5ib3coTWFpbiwiU3Ryb2tlIikgRHJhZyhNYWluKSBsb2NhbCBUYWJGcmFtZSA9IEluc3RhbmNlLm5ldygiRncmYW1lIiwgTWFpbikgVGFiRnJhbWUuU2l6ZSA9IFVETTIubmV3KDEsMCwwLDQwKSBUYWJGcmFtZS5CYWNrZ3JvdW5kVHJhbnNwYXJlbmN5ID0gMC43IGxvY2FsIFRhYnMgPSB7Ik1haW4iLCJQbGF5ZXJzIiwiU2V0dGluZ3MiLCJGdW4iLCJTZWN1cml0eSJ9IGxvY2FsIFBhZ2VzID0ge30gZm9yIGksbmFtZSBpbiBpcGFpcnMoVGFicykgZG8gbG9jYWwgYnRuID0gSW5zdGFuY2UubmV3KCJUZXh0QnV0dG9uIiwgVGFiRnJhbWUpIGJ0bi5TaXplID0gVURNMi5uZXcoMC4yLDAsMSwwKSBidW4uUG9zaXRpb24gPSBVRE0yLm5ldygoaS0xKSowLjIsMCwwLDApIGJ0bi5UZXh0ID0gbmFtZSBNYWtlUmFpbmJvdyhidG4sIkJhY2tncm91bmQiKSBNYWtlUmFpbmJvdyhidG4sIlRleHQiKSBsb2NhbCBwYWdlID0gSW5zdGFuY2UubmV3KCJTY3JvbGxpbmdGcmFtZSIsIE1haW4pIHBhZ2UuU2l6ZSA9IFVETTIubmV3KDEsMCwxLC00MCkgcGFnZS5Qb3NpdGlvbiA9IFVETTIubmV3KDAsMCwwLDQwKSBwYWdlLlZpc2libGUgPSAobmFtZSA9PSAiTWFpbiIpIHBhZ2UuQmFja2dyb3VuZFRyYW5zcGFyZW5jeSA9IDEgcGFnZS5DYW52YXNTaXplID0gVURNMi5uZXcoMCwwLDIsMCkgcGFnZS5TY3JvbGxiYXJUaGlja25lc3MgPSA1IFBhZ2VzW25hbWV0ID0gcGFnZSBidG4uTW91c2VCdXR0b24xQ2xpY2s6Q29ubmVjdChmdW5jdGlvbigpIGZvciBfLHAgaW4gcGFpcnMoUGFnZXMpIGRvIHAuVmlzaWJsZSA9IGZhbHNlIGVuZCBwYWdlLlZpc2libGUgPSB0cnVlIGVuZCkgZW5kIGxvY2FsIFNjcmlwdHMgPSB7IHtuYW1lPSJBYm9vZCIsIHVybD0iaHR0cHM6Ly9yYXcuZ2l0aHVidXNlcmNvbnRlbnQuY29tL2pzaHNoZ2EvYWJvb2QtYXUzL3JlZnMvaGVhZHMvbWFpbi9hYm9vZGF1MyJ9LCB7bmFtZT0iTE9STE4iLCB1cmw9Imh0dHBzOi8vcmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbS9MT1JMTjkvTE9STE4tUFJPL3JlZnMvaGVhZHMvbWFpbi9MT1JMTiUyMExPUiJ9LCB7bmFtZT0iWW91c3NlZiIsIHVybD0iaHR0cHM6Ly9wYXN0ZWJpbi5jb20vcmF3L2FWZ1JmeEtpIn0gfSBmb3IgaSxzIGluIGlwYWlycyhTY3JpcHRzKSBkbyBsb2NhbCBiID0gSW5zdGFuY2UubmV3KCJUZXh0QnV0dG9uIiwgUGFnZXNbIk1haW4iXSkgYi5TaXplID0gVURNMi5uZXcoMC44LDAsMCw0MCkgYi5Qb3NpdGlvbiA9IFVETTIubmV3KDAuMSwwLDAsIChpLTEpKjUwICsgMjApIGIuVGV4dCA9IHMubmFtZSBNYWtlUmFpbmJvdyhiLCJCYWNrZ3JvdW5kIikgYi5Nb3VzZUJ1dHRvbjFDbGljazpDb25uZWN0KGZ1bmN0aW9uKCkgcGNhbGwoZnVuY3Rpb24oKSBsb2Fkc3RyaW5nKGdhbWU6SHR0cEdldChzLnVybCkpKCkgZW5kKSBlbmQpIGVuZCBsb2NhbCBQbGF5ZXJzVGFiID0gUGFnZXNbIlBsYXllcnMiXSBsb2NhbCBVSUxpc3RMYXlvdXQgPSBJbnN0YW5jZS5uZXcoIlVJTGlzdExheW91dCIsIFBsYXllcnNUYWIpIFVJTGlzdExheW91dC5Tb3J0T3JkZXIgPSBFbnVtLlNvcnRPcmRlci5MYXlvdXRPcmRlciBVSUxpc3RMYXlvdXQuUGFkZGluZyA9IFVETS5uZXcoMCw1KSBsb2NhbCBmdW5jdGlvbiBSZWZyZXNoUGxheWVycygpIGZvciBfLGNoaWxkIGluIGlwYWlycyhQbGF5ZXJzVGFiOkdldENoaWxkcmVuKCkpIGRvIGlmIGNoaWxkOklzQSgiRncmYW1lIikgdGhlbiBjaGlsZDpEZXN0cm95KCkgZW5kIGVuZCBmb3IgXyxwIGluIGlwYWlycyhQbGF5ZXJzOkdldFBsYXllcnMoKSkgZG8gaWYgcCA9PSBQbGF5ZXJzLkxvY2FsUGxheWVyIHRoZW4gY29udGludWUgZW5kIGxvY2FsIGZyYW1lID0gSW5zdGFuY2UubmV3KCJGcmFtZSIsIFBsYXllcnNUYWIpIGZyYW1lLlNpemUgPSBVRE0yLm5ldygxLC0xMCwwLDUwKSBmcmFtZS5CYWNrZ3JvdW5kQ29sb3IzID0gQ29sb3IzLmZyb21SR0IoMCwwLDApIGZyYW1lLkJhY2tncm91bmRUcmFuc3BhcmVuY3kgPSAwLjUgbG9jYWwgaW1nID0gSW5zdGFuY2UubmV3KCJJbWFnZUxhYmVsIiwgZncmYW1lKSBpbWcuU2l6ZSA9IFVETTIubmV3KDAsNDAsMCw0MCkgaW1nLlBvc2l0aW9uID0gVURNMi5uZXcoMCw1LDAsNSkgcGNhbGwoZnVuY3Rpb24oKSBpbWcuSW1hZ2UgPSBQbGF5ZXJzOkdldFVzZXJUaHVtYm5haWxBc3luYyhwLlVzZXJJZCwgRW51bS5UaHVtYm5haWxUeXBlLkF2YXRhckJ1c3QsIEVudW0uVGh1bWJuYWlsU2l6ZS5TaXplNDh4NDgpIGVuZCkgbG9jYWwgbmFtZUwgPSBJbnN0YW5jZS5uZXcoIlRleHRMYWJlbCIsIGZyYW1lKSBuYW1lTC5TaXplID0gVURNMi5uZXcoMC40LDAsMSwwKSBuYW1lTC5Qb3NpdGlvbiA9IFVETTIubmV3KDAuMiwwLDAsMCkgbmFtZUwuVGV4dCA9IHAuTmFtZSBuYW1lTC5UZXh0Q29sb3IzID0gQ29sb3IzLmZyb21SR0IoMjU1LDI1NSwyNTUpIG5hbWVMLkJhY2tncm91bmRUcmFuc3BhcmVuY3kgPSAxIG5hbWVMLlRleHRTY2FsZWQgPSB0cnVlIGxvY2FsIFRQQnRuID0gSW5zdGFuY2UubmV3KCJUZXh0QnV0dG9uIiwgZncmYW1lKSBUUEJ0bi5TaXplID0gVURNMi5uZXcoMCwxMDAsMCwzMCkgVFBCdG4uUG9zaXRpb24gPSBVRE0yLm5ldygxLC0xMTAsMC41LC0xNSkgVFBCdG4uVGV4dCA9ICJUZWxlcG9ydCIgTWFrZVJhaW5ib3coVFBCdG4sIkJhY2tncm91bmQiKSBUUEJ0bi5Nb3VzZUJ1dHRvbjFDbGljazpDb25uZWN0KGZ1bmN0aW9uKCkgaWYgcC5DaGFyYWN0ZXIgYW5kIHAuQ2hhcmFjdGVyOkZpbmRGaXJzdENoaWxkKCJIdW1hbm9pZFJvb3RQYXJ0IikgdGhlbiBQbGF5ZXJzLkxvY2FsUGxheWVyLkNoYXJhY3Rlci5IdW1hbm9pZFJvb3RQYXJ0LkNGcmFtZSA9IHAuQ2hhcmFjdGVyLkh1bWFub2lkUm9vdFBhcnQuQ0ZyYW1lIGVuZCBlbmQpIGVuZCBlbmQgUmVmcmVzaFBsYXllcnMoKSBQbGF5ZXJzLlBsYXllckFkZGVkOkNvbm5lY3QoUmVmcmVzaFBsYXllcnMpIFBsYXllcnMuUGxheWVyUmVtb3Zpbmc6Q29ubmVjdChSZWZyZXNoUGxheWVycykgbG9jYWwgU2V0VGFiID0gUGFnZXNbIlNldHRpbmdzIl0gbG9jYWwgZnVuY3Rpb24gQWRkU2V0QnRuKHR4dCwgcG9zLCBjYWxsYmFjaykgbG9jYWwgYiA9IEluc3RhbmNlLm5ldygiVGV4dEJ1dHRvbiIsIFNldFRhYikgYi5TaXplID0gVURNMi5uZXcoMC44LDAsMCw0MCkgYi5Qb3NpdGlvbiA9IFVETTIubmV3KDAuMSwwLDAscG9zKSBiLlRleHQgPSB0eHQgTWFrZVJhaW5ib3coYiwiQmFja2dyb3VuZCIpIGIuTW91c2VCdXR0b24xQ2xpY2s6Q29ubmVjdChjYWxsYmFjaykgcmV0dXJuIGIgZW5kIGxvY2FsIG5hbWVzT24gPSB0cnVlIEFkZFNldEJ0bigiSGlkZS9TaG93IE5hbWVzIiwgMjAsIGZ1bmN0aW9uKCkgbmFtZXNPbiA9IG5vdCBuYW1lc09uIGZvciBfLHYgaW4gcGFpcnMoUGxheWVyczpHZXRQbGF5ZXJzKCkpIGRvIHBjYWxsKGZ1bmN0aW9uKCkgaWYgdi5DaGFyYWN0ZXI6RmluZEZpcnN0Q2hpbGQoIkhlYWQiKSBhbmQgdi5DaGFyYWN0ZXIuSGVhZDpGaW5kRmlyc3RDaGlsZE9mQ2xhc3MoIkJpbGxib2FyZEd1aSIpIHRoZW4gdi5DaGFyYWN0ZXIuSGVhZDpGaW5kRmlyc3RDaGlsZE9mQ2xhc3MoIkJpbGxib2FyZEd1aSIpLkVuYWJsZWQgPSBuYW1lc09uIGVuZCBlbmQpIGVuZCBlbmQpIEFkZFNldEJ0bigiUmVkIFRoZW1lIiwgNzAsIGZ1bmN0aW9uKCkgaWYgTWFpbjpGaW5kRmlyc3RDaGlsZCgiUmFpbmJvd0dyYWQiKSB0aGVuIE1haW4uUmFpbmJvd0dyYWQ6RGVzdHJveSgpIGVuZCBNYWluLkJhY2tncm91bmRDb2xvcjMgPSBDb2xvclMuZnJvbVJHQigxNTAsMCwwKSBlbmQpIEFkZFNldEJ0bigiV2hpdGUgVGhlbWUiLCAxMjAsIGZ1bmN0aW9uKCkgaWYgTWFpbjpGaW5kRmlyc3RDaGlsZCgiUmFpbmJvd0dyYWQiKSB0aGVuIE1haW4uUmFpbmJvd0dyYWQ6RGVzdHJveSgpIGVuZCBNYWluLkJhY2tncm91bmRDb2xvcjMgPSBDb2xvclMuZnJvbVJHQigyNTUsMjU1LDI1NSkgZW5kKSBBZGZTZXRCdG4oIlJlc2V0IFJhaW5ib3ciLCAxNzAsIGZ1bmN0aW9uKCkgTWFrZVJhaW5ib3coTWFpbiwiQmFja2dyb3VuZCIpIGVuZCkgbG9jYWwgRnVuVGFiID0gUGFnZXNbIkZ1biJdIEFkZFNldEJ0bigiTG93IEdyYXZpdHkgKE1vb24pIiwgMjAsIGZ1bmN0aW9uKCkgd29ya3NwYWNlLkdyYXZpdHkgPSAod29ya3NwYWNlLkdyYXZpdHkgPT0gMTk2LjIpIGFuZCA1MCBvciAxOTYuMiBlbmQpLlBhcmVudCA9IEZ1blRhYiBBZGZTZXRCdG4oIlN1cGVyIFNwZWVkIiwgNzAsIGZ1bmN0aW9uKCkgbG9jYWwgaCA9IFBsYXllcnMuTG9jYWxQbGF5ZXIuQ2hhcmFjdGVyLkh1bWFub2lkIGguV2Fsa1NwZWVkID0gKGguV2Fsa1NwZWVkID09IDE2KSBhbmQgMTAwIG9yIDE2IGVuZCkuUGFyZW50ID0gRnVuVGFiIGxvY2FsIHNwaW4gPSBmYWxzZSBBZGZTZXRCdG4oIlNwaW4gTWUhIiwgMTIwLCBmdW5jdGlvbigpIHNwaW4gPSBub3Qgc3BpbiBzcGF3bihmdW5jdGlvbigpIHdoaWxlIHNwaW4gZG8gUGxheWVycy5Mb2NhbFBsYXllci5DaGFyYWN0ZXIuSHVtYW5vaWRSb290UGFydC5DRmZyYW1lICo9IENGcmFtZS5BbmdsZXMoMCxtYXRoLnJhZCgyMCksMCkgdGFzay53YWl0KDAuMDEpIGVuZCBlbmQpIGVuZCkuUGFyZW50ID0gRnVuVGFiIGxvY2FsIFNlY1RhYiA9IFBhZ2VzWyJTZWN1cml0eSJdIEFkZFNldEJ0bigiQW50aS1BRksiLCAyMCwgZnVuY3Rpb24oKSBQbGF5ZXJzLkxvY2FsUGxheWVyLklkbGVkOkNvbm5lY3QoZnVuY3Rpb24oKSBnYW1lOkdldFNlcnZpY2UoIlZpcnR1YWxVc2VyIik6QnV0dG9uMkRvd24oVmVjdG9yMi5uZXcoMCwwKSx3b3Jrc3BhY2UuQ3VycmVudENhbWVyYS5DRmZyYW1lKSB3YWl0KDEpIGdhbWU6R2V0U2VydmljZSgiVmlydHVhbFVzZXIiKTouQnV0dG9uMlVwKFZlY3RvcjIubmV3KDAsMCksd29ya3NwYWNlLkN1cnJlbnRDYW1lcmEuQ0ZyYW1lKSBlbmQpIGVuZCkuUGFyZW50ID0gU2VjVGFiIEFkZFNldEJ0bigiU2VydmVyIEhvcCIsIDcwLCBmdW5jdGlvbigpIGdhbWU6R2V0U2VydmljZSgiVGVsZXBvcnRTZXJ2aWNlIik6VGVsZXBvcnQoZ2FtZS5QbGFjZUlkKSBlbmQpLlBhcmVudCA9IFNlY1RhYiBBZGZTZXRCdG4oIlNlbGYgRGVzdHJ1Y3QiLCAxMjAsIGZ1bmN0aW9uKCkgU2NyZWVuR3VpOkRlc3
+-- MAIN WINDOW
+local Main = Instance.new("Frame", ScreenGui)
+Main.Size = UDim2.new(0,500,0,400)
+Main.Position = UDim2.new(0.5,-250,0.5,-200)
+Main.Visible = true -- تم تعديله ليظهر مباشرة
+MakeRainbow(Main,"Background")
+MakeRainbow(Main,"Stroke")
+Drag(Main)
+
+-- Tabs System
+local TabFrame = Instance.new("Frame", Main)
+TabFrame.Size = UDim2.new(1,0,0,40)
+TabFrame.BackgroundTransparency = 0.7
+
+local Tabs = {"Main","Players","Settings","Fun","Security"}
+local Pages = {}
+
+for i,name in ipairs(Tabs) do
+    local btn = Instance.new("TextButton", TabFrame)
+    btn.Size = UDim2.new(0.2,0,1,0)
+    btn.Position = UDim2.new((i-1)*0.2,0,0,0)
+    btn.Text = name
+    MakeRainbow(btn,"Background")
+    MakeRainbow(btn,"Text")
+
+    local page = Instance.new("ScrollingFrame", Main)
+    page.Size = UDim2.new(1,0,1,-40)
+    page.Position = UDim2.new(0,0,0,40)
+    page.Visible = (name == "Main") -- جعل صفحة Main هي الظاهرة تلقائياً
+    page.BackgroundTransparency = 1
+    page.CanvasSize = UDim2.new(0,0,2,0)
+    page.ScrollBarThickness = 5
+    Pages[name] = page
+
+    btn.MouseButton1Click:Connect(function()
+        for _,p in pairs(Pages) do p.Visible = false end
+        page.Visible = true
+    end)
+end
+
+-- 1. MAIN TAB
+local Scripts = {
+    {name="Abood", url="https://raw.githubusercontent.com/jshshga/abood-au3/refs/heads/main/aboodau3"},
+    {name="LORLN", url="https://raw.githubusercontent.com/LORLN9/LORLN-PRO/refs/heads/main/LORLN%20LOR"},
+    {name="Youssef", url="https://pastebin.com/raw/aVgRfxKi"}
+}
+
+for i,s in ipairs(Scripts) do
+    local b = Instance.new("TextButton", Pages["Main"])
+    b.Size = UDim2.new(0.8,0,0,40)
+    b.Position = UDim2.new(0.1,0,0, (i-1)*50 + 20)
+    b.Text = s.name
+    MakeRainbow(b,"Background")
+    b.MouseButton1Click:Connect(function() 
+        pcall(function()
+            loadstring(game:HttpGet(s.url))() 
+        end)
+    end)
+end
+
+-- 2. PLAYERS TAB
+local PlayersTab = Pages["Players"]
+local UIListLayout = Instance.new("UIListLayout", PlayersTab)
+UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+UIListLayout.Padding = UDim.new(0,5)
+
+local function RefreshPlayers()
+    for _,child in ipairs(PlayersTab:GetChildren()) do if child:IsA("Frame") then child:Destroy() end end
+    for _,p in ipairs(Players:GetPlayers()) do
+        if p == Players.LocalPlayer then continue end
+        local frame = Instance.new("Frame", PlayersTab)
+        frame.Size = UDim2.new(1,-10,0,50)
+        frame.BackgroundColor3 = Color3.fromRGB(0,0,0)
+        frame.BackgroundTransparency = 0.5
+        
+        local img = Instance.new("ImageLabel", frame)
+        img.Size = UDim2.new(0,40,0,40)
+        img.Position = UDim2.new(0,5,0,5)
+        pcall(function() img.Image = Players:GetUserThumbnailAsync(p.UserId, Enum.ThumbnailType.AvatarBust, Enum.ThumbnailSize.Size48x48) end)
+
+        local nameL = Instance.new("TextLabel", frame)
+        nameL.Size = UDim2.new(0.4,0,1,0)
+        nameL.Position = UDim2.new(0.2,0,0,0)
+        nameL.Text = p.Name
+        nameL.TextColor3 = Color3.fromRGB(255,255,255)
+        nameL.BackgroundTransparency = 1
+        nameL.TextScaled = true
+
+        local TPBtn = Instance.new("TextButton", frame)
+        TPBtn.Size = UDim2.new(0,100,0,30)
+        TPBtn.Position = UDim2.new(1,-110,0.5,-15)
+        TPBtn.Text = "Teleport"
+        MakeRainbow(TPBtn,"Background")
+        TPBtn.MouseButton1Click:Connect(function()
+            if p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                Players.LocalPlayer.Character.HumanoidRootPart.CFrame = p.Character.HumanoidRootPart.CFrame
+            end
+        end)
+    end
+end
+RefreshPlayers()
+Players.PlayerAdded:Connect(RefreshPlayers)
+Players.PlayerRemoving:Connect(RefreshPlayers)
+
+-- 3. SETTINGS TAB
+local SetTab = Pages["Settings"]
+local function AddSetBtn(txt, pos, callback)
+    local b = Instance.new("TextButton", SetTab)
+    b.Size = UDim2.new(0.8,0,0,40)
+    b.Position = UDim2.new(0.1,0,0,pos)
+    b.Text = txt
+    MakeRainbow(b,"Background")
+    b.MouseButton1Click:Connect(callback)
+    return b
+end
+local namesOn = true
+AddSetBtn("Hide/Show Names", 20, function()
+    namesOn = not namesOn
+    for _,v in pairs(Players:GetPlayers()) do 
+        pcall(function() 
+            if v.Character:FindFirstChild("Head") and v.Character.Head:FindFirstChildOfClass("BillboardGui") then
+                v.Character.Head:FindFirstChildOfClass("BillboardGui").Enabled = namesOn 
+            end
+        end) 
+    end
+end)
+AddSetBtn("Red Theme", 70, function() if Main:FindFirstChild("RainbowGrad") then Main.RainbowGrad:Destroy() end Main.BackgroundColor3 = Color3.fromRGB(150,0,0) end)
+AddSetBtn("White Theme", 120, function() if Main:FindFirstChild("RainbowGrad") then Main.RainbowGrad:Destroy() end Main.BackgroundColor3 = Color3.fromRGB(255,255,255) end)
+AddSetBtn("Reset Rainbow", 170, function() MakeRainbow(Main,"Background") end)
+
+-- 4. FUN TAB
+local FunTab = Pages["Fun"]
+AddSetBtn("Low Gravity (Moon)", 20, function() workspace.Gravity = (workspace.Gravity == 196.2) and 50 or 196.2 end).Parent = FunTab
+AddSetBtn("Super Speed", 70, function() local h = Players.LocalPlayer.Character.Humanoid h.WalkSpeed = (h.WalkSpeed == 16) and 100 or 16 end).Parent = FunTab
+local spin = false
+AddSetBtn("Spin Me!", 120, function() 
+    spin = not spin 
+    spawn(function() 
+        while spin do 
+            Players.LocalPlayer.Character.HumanoidRootPart.CFrame *= CFrame.Angles(0,math.rad(20),0) 
+            task.wait(0.01) 
+        end 
+    end) 
+end).Parent = FunTab
+
+-- 5. SECURITY TAB
+local SecTab = Pages["Security"]
+AddSetBtn("Anti-AFK", 20, function()
+    Players.LocalPlayer.Idled:Connect(function() 
+        game:GetService("VirtualUser"):Button2Down(Vector2.new(0,0),workspace.CurrentCamera.CFrame) 
+        wait(1) 
+        game:GetService("VirtualUser"):Button2Up(Vector2.new(0,0),workspace.CurrentCamera.CFrame) 
+    end)
+end).Parent = SecTab
+AddSetBtn("Server Hop", 70, function() game:GetService("TeleportService"):Teleport(game.PlaceId) end).Parent = SecTab
+AddSetBtn("Self Destruct", 120, function() ScreenGui:Destroy() end).Parent = SecTab
+
+-- Final Logic
+local Toggle = Instance.new("TextButton", ScreenGui)
+Toggle.Size = UDim2.new(0,50,0,50)
+Toggle.Position = UDim2.new(0,20,0,50)
+Toggle.Text = "ABC"
+Toggle.TextScaled = true
+Instance.new("UICorner", Toggle).CornerRadius = UDim.new(1,0)
+MakeRainbow(Toggle,"Background")
+Drag(Toggle)
+local open = true
+Toggle.MouseButton1Click:Connect(function() open = not open Main.Visible = open end)
