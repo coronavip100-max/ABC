@@ -1,248 +1,135 @@
--- [[ ABC SUPER GUI - FINAL MILITARY DELTA EDITION - MODDED (NO KEY) ]] --
+-- ABC SCRIPT - FINAL MASTER SYSTEM (ALL LINKS INTEGRATED)
 local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
-local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
-local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
-ScreenGui.Name = "ABC_SUPER_GUI"
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Parent = game.CoreGui
+ScreenGui.Name = "ABC_Final_Production"
+ScreenGui.IgnoreGuiInset = true
 
--- Rainbow Function
-local function MakeRainbow(obj, property)
-    if property == "Background" then
-        if obj:FindFirstChild("RainbowGrad") then obj.RainbowGrad:Destroy() end
-        local grad = Instance.new("UIGradient", obj)
-        grad.Name = "RainbowGrad"
-        grad.Color = ColorSequence.new{
-            ColorSequenceKeypoint.new(0, Color3.fromRGB(255,0,0)),
-            ColorSequenceKeypoint.new(0.2, Color3.fromRGB(255,255,0)),
-            ColorSequenceKeypoint.new(0.4, Color3.fromRGB(0,255,0)),
-            ColorSequenceKeypoint.new(0.6, Color3.fromRGB(0,255,255)),
-            ColorSequenceKeypoint.new(0.8, Color3.fromRGB(0,0,255)),
-            ColorSequenceKeypoint.new(1, Color3.fromRGB(255,0,255))
-        }
-        spawn(function()
-            while obj.Parent and grad.Parent do
-                grad.Rotation += 2
-                task.wait(0.02)
-            end
-        end)
-    elseif property == "Text" then
-        spawn(function()
-            while obj.Parent do
-                for i=0,1,0.01 do
-                    obj.TextColor3 = Color3.fromHSV(i,1,1)
-                    task.wait(0.02)
-                end
-            end
-        end)
-    elseif property == "Stroke" then
-        local stroke = obj:FindFirstChildOfClass("UIStroke") or Instance.new("UIStroke", obj)
-        stroke.Thickness = 3
-        local grad = Instance.new("UIGradient", stroke)
-        grad.Color = ColorSequence.new{
-            ColorSequenceKeypoint.new(0, Color3.fromRGB(255,0,0)),
-            ColorSequenceKeypoint.new(0.2, Color3.fromRGB(255,255,0)),
-            ColorSequenceKeypoint.new(0.4, Color3.fromRGB(0,255,0)),
-            ColorSequenceKeypoint.new(0.6, Color3.fromRGB(0,255,255)),
-            ColorSequenceKeypoint.new(0.8, Color3.fromRGB(0,0,255)),
-            ColorSequenceKeypoint.new(1, Color3.fromRGB(255,0,255))
-        }
-        spawn(function()
-            while obj.Parent and grad.Parent do
-                grad.Rotation += 2
-                task.wait(0.02)
-            end
-        end)
-    end
+-- [ 1. زر الدائرة العائم ]
+local ToggleBtn = Instance.new("TextButton", ScreenGui)
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(5, 5, 15)
+ToggleBtn.Position = UDim2.new(0.05, 0, 0.4, 0)
+ToggleBtn.Size = UDim2.new(0, 60, 0, 60)
+ToggleBtn.Text = "ABC"
+ToggleBtn.TextColor3 = Color3.fromRGB(0, 255, 255)
+ToggleBtn.Font = Enum.Font.GothamBold
+ToggleBtn.Active = true
+ToggleBtn.Draggable = true
+Instance.new("UICorner", ToggleBtn).CornerRadius = UDim.new(1, 0)
+
+local ToggleStroke = Instance.new("UIStroke", ToggleBtn)
+ToggleStroke.Thickness = 2.5
+ToggleStroke.Color = Color3.fromRGB(0, 200, 255)
+local ToggleGradient = Instance.new("UIGradient", ToggleStroke)
+ToggleGradient.Color = ColorSequence.new{ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 150, 255)), ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 255, 200))}
+
+-- [ 2. القائمة الرئيسية ]
+local MainFrame = Instance.new("Frame", ScreenGui)
+MainFrame.BackgroundColor3 = Color3.fromRGB(4, 4, 10)
+MainFrame.Position = UDim2.new(0.5, -175, 0.5, -250)
+MainFrame.Size = UDim2.new(0, 350, 0, 500)
+MainFrame.Visible = true
+MainFrame.ClipsDescendants = true
+MainFrame.Draggable = true
+MainFrame.Active = true
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 15)
+
+local MainStroke = Instance.new("UIStroke", MainFrame)
+MainStroke.Thickness = 3
+MainStroke.Color = Color3.fromRGB(0, 200, 255)
+
+ToggleBtn.MouseButton1Click:Connect(function() MainFrame.Visible = not MainFrame.Visible end)
+
+-- [ 3. نظام النجوم ]
+local StarsContainer = Instance.new("Frame", MainFrame)
+StarsContainer.Size = UDim2.new(1, 0, 1, 0); StarsContainer.BackgroundTransparency = 1
+local starsActive = true
+local function spawnStar()
+    if not starsActive then return end
+    local star = Instance.new("Frame", StarsContainer)
+    star.Size = UDim2.new(0, math.random(1,2), 0, math.random(1,2))
+    star.Position = UDim2.new(math.random(), 0, -0.05, 0); star.BackgroundColor3 = Color3.fromRGB(0, 255, 255)
+    Instance.new("UICorner", star); local speed = math.random(5, 10)
+    TweenService:Create(star, TweenInfo.new(speed), {Position = UDim2.new(star.Position.X.Scale, 0, 1.1, 0), BackgroundTransparency = 1}):Play()
+    task.delay(speed, function() star:Destroy() end)
 end
+task.spawn(function() while true do spawnStar() task.wait(0.18) end end)
 
--- Drag Function
-local function Drag(frame)
-    local dragging, startPos, startFramePos
-    frame.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = true
-            startPos = input.Position
-            startFramePos = frame.Position
-        end
-    end)
-    frame.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
-    end)
-    UserInputService.InputChanged:Connect(function(input)
-        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-            local delta = input.Position - startPos
-            frame.Position = UDim2.new(startFramePos.X.Scale, startFramePos.X.Offset + delta.X, startFramePos.Y.Scale, startFramePos.Y.Offset + delta.Y)
-        end
-    end)
-end
+-- [ 4. العنوان والبحث ]
+local Title = Instance.new("TextLabel", MainFrame)
+Title.Text = "ABC"; Title.Size = UDim2.new(1, 0, 0, 45); Title.Position = UDim2.new(0, 0, 0, 10); Title.BackgroundTransparency = 1; Title.TextColor3 = Color3.fromRGB(0, 255, 255); Title.Font = Enum.Font.GothamBold; Title.TextSize = 26
 
--- MAIN WINDOW
-local Main = Instance.new("Frame", ScreenGui)
-Main.Size = UDim2.new(0,500,0,400)
-Main.Position = UDim2.new(0.5,-250,0.5,-200)
-Main.Visible = true -- تم تعديله ليظهر مباشرة
-MakeRainbow(Main,"Background")
-MakeRainbow(Main,"Stroke")
-Drag(Main)
+local SearchBar = Instance.new("TextBox", MainFrame)
+SearchBar.Size = UDim2.new(0.85, 0, 0, 35); SearchBar.Position = UDim2.new(0.075, 0, 0, 60); SearchBar.BackgroundColor3 = Color3.fromRGB(15, 15, 25); SearchBar.PlaceholderText = "Search Scripts..."; SearchBar.TextColor3 = Color3.new(1, 1, 1); SearchBar.Font = Enum.Font.Gotham; Instance.new("UICorner", SearchBar)
+local SearchStroke = Instance.new("UIStroke", SearchBar); SearchStroke.Color = Color3.fromRGB(0, 150, 255)
 
--- Tabs System
-local TabFrame = Instance.new("Frame", Main)
-TabFrame.Size = UDim2.new(1,0,0,40)
-TabFrame.BackgroundTransparency = 0.7
+-- [ 5. القائمة والبطاقات ]
+local Scroll = Instance.new("ScrollingFrame", MainFrame)
+Scroll.Size = UDim2.new(0.9, 0, 0, 360); Scroll.Position = UDim2.new(0.05, 0, 0, 110); Scroll.BackgroundTransparency = 1; Scroll.ScrollBarThickness = 0; Scroll.CanvasSize = UDim2.new(0,0,2.5,0)
+Instance.new("UIListLayout", Scroll).Padding = UDim.new(0, 12)
 
-local Tabs = {"Main","Players","Settings","Fun","Security"}
-local Pages = {}
-
-for i,name in ipairs(Tabs) do
-    local btn = Instance.new("TextButton", TabFrame)
-    btn.Size = UDim2.new(0.2,0,1,0)
-    btn.Position = UDim2.new((i-1)*0.2,0,0,0)
-    btn.Text = name
-    MakeRainbow(btn,"Background")
-    MakeRainbow(btn,"Text")
-
-    local page = Instance.new("ScrollingFrame", Main)
-    page.Size = UDim2.new(1,0,1,-40)
-    page.Position = UDim2.new(0,0,0,40)
-    page.Visible = (name == "Main") -- جعل صفحة Main هي الظاهرة تلقائياً
-    page.BackgroundTransparency = 1
-    page.CanvasSize = UDim2.new(0,0,2,0)
-    page.ScrollBarThickness = 5
-    Pages[name] = page
-
-    btn.MouseButton1Click:Connect(function()
-        for _,p in pairs(Pages) do p.Visible = false end
-        page.Visible = true
-    end)
-end
-
--- 1. MAIN TAB
-local Scripts = {
-    {name="Abood", url="https://raw.githubusercontent.com/jshshga/abood-au3/refs/heads/main/aboodau3"},
-    {name="LORLN", url="https://raw.githubusercontent.com/LORLN9/LORLN-PRO/refs/heads/main/LORLN%20LOR"},
-    {name="Youssef", url="https://pastebin.com/raw/aVgRfxKi"}
-}
-
-for i,s in ipairs(Scripts) do
-    local b = Instance.new("TextButton", Pages["Main"])
-    b.Size = UDim2.new(0.8,0,0,40)
-    b.Position = UDim2.new(0.1,0,0, (i-1)*50 + 20)
-    b.Text = s.name
-    MakeRainbow(b,"Background")
+local allCardsStrokes = {}
+local function createCard(name, url)
+    local Card = Instance.new("Frame", Scroll)
+    Card.Name = name; Card.Size = UDim2.new(1, 0, 0, 70); Card.BackgroundColor3 = Color3.fromRGB(10, 10, 15); Instance.new("UICorner", Card)
+    local cStroke = Instance.new("UIStroke", Card); cStroke.Thickness = 2; cStroke.Color = MainStroke.Color; table.insert(allCardsStrokes, cStroke)
+    
+    local n = Instance.new("TextLabel", Card); n.Text = name; n.Size = UDim2.new(0.6,0,1,0); n.Position = UDim2.new(0.05,0,0,0); n.BackgroundTransparency = 1; n.TextColor3 = Color3.new(1,1,1); n.Font = Enum.Font.GothamBold; n.TextXAlignment = 0; n.TextSize = 17
+    local b = Instance.new("TextButton", Card); b.Text = "EXECUTE"; b.Size = UDim2.new(0,95,0,35); b.Position = UDim2.new(0.65,0,0.25,0); b.BackgroundColor3 = Color3.fromRGB(220,30,30); b.TextColor3 = Color3.new(1,1,1); b.Font = Enum.Font.GothamBold; Instance.new("UICorner", b)
+    
     b.MouseButton1Click:Connect(function() 
-        pcall(function()
-            loadstring(game:HttpGet(s.url))() 
-        end)
+        loadstring(game:HttpGet(url))()
+        print("Executed: " .. name)
     end)
 end
 
--- 2. PLAYERS TAB
-local PlayersTab = Pages["Players"]
-local UIListLayout = Instance.new("UIListLayout", PlayersTab)
-UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-UIListLayout.Padding = UDim.new(0,5)
-
-local function RefreshPlayers()
-    for _,child in ipairs(PlayersTab:GetChildren()) do if child:IsA("Frame") then child:Destroy() end end
-    for _,p in ipairs(Players:GetPlayers()) do
-        if p == Players.LocalPlayer then continue end
-        local frame = Instance.new("Frame", PlayersTab)
-        frame.Size = UDim2.new(1,-10,0,50)
-        frame.BackgroundColor3 = Color3.fromRGB(0,0,0)
-        frame.BackgroundTransparency = 0.5
-        
-        local img = Instance.new("ImageLabel", frame)
-        img.Size = UDim2.new(0,40,0,40)
-        img.Position = UDim2.new(0,5,0,5)
-        pcall(function() img.Image = Players:GetUserThumbnailAsync(p.UserId, Enum.ThumbnailType.AvatarBust, Enum.ThumbnailSize.Size48x48) end)
-
-        local nameL = Instance.new("TextLabel", frame)
-        nameL.Size = UDim2.new(0.4,0,1,0)
-        nameL.Position = UDim2.new(0.2,0,0,0)
-        nameL.Text = p.Name
-        nameL.TextColor3 = Color3.fromRGB(255,255,255)
-        nameL.BackgroundTransparency = 1
-        nameL.TextScaled = true
-
-        local TPBtn = Instance.new("TextButton", frame)
-        TPBtn.Size = UDim2.new(0,100,0,30)
-        TPBtn.Position = UDim2.new(1,-110,0.5,-15)
-        TPBtn.Text = "Teleport"
-        MakeRainbow(TPBtn,"Background")
-        TPBtn.MouseButton1Click:Connect(function()
-            if p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-                Players.LocalPlayer.Character.HumanoidRootPart.CFrame = p.Character.HumanoidRootPart.CFrame
-            end
-        end)
-    end
-end
-RefreshPlayers()
-Players.PlayerAdded:Connect(RefreshPlayers)
-Players.PlayerRemoving:Connect(RefreshPlayers)
-
--- 3. SETTINGS TAB
-local SetTab = Pages["Settings"]
-local function AddSetBtn(txt, pos, callback)
-    local b = Instance.new("TextButton", SetTab)
-    b.Size = UDim2.new(0.8,0,0,40)
-    b.Position = UDim2.new(0.1,0,0,pos)
-    b.Text = txt
-    MakeRainbow(b,"Background")
-    b.MouseButton1Click:Connect(callback)
-    return b
-end
-local namesOn = true
-AddSetBtn("Hide/Show Names", 20, function()
-    namesOn = not namesOn
-    for _,v in pairs(Players:GetPlayers()) do 
-        pcall(function() 
-            if v.Character:FindFirstChild("Head") and v.Character.Head:FindFirstChildOfClass("BillboardGui") then
-                v.Character.Head:FindFirstChildOfClass("BillboardGui").Enabled = namesOn 
-            end
-        end) 
+-- إضافة الروابط التي طلبتها بالترتيب
+createCard("ABOOD", "https://raw.githubusercontent.com/jshshga/abood-au3/refs/heads/main/aboodau3")
+createCard("LORLN", "https://raw.githubusercontent.com/LORLN9/LORLN-PRO/refs/heads/main/LORLN%20LOR")
+createCard("YOUSEF", "https://pastebin.com/raw/aVgRfxKi")
+createCard("QUALITY", "https://raw.githubusercontent.com/randomstring0/pshade-ultimate/refs/heads/main/src/cd.lua")
+createCard("DARK HUB", "https://rawscripts.net/raw/mwahb-rsm-adna-Dark-Hub-122515")                createCard("BLOOD", "https://rawscripts.net/raw/Universal-Script-Blood-scriptss-112548")              createCard("MOLYEN", "https://rawscripts.net/raw/Universal-Script-Molyn-better-than-VR7-193694")                                                                                                                                              createCard("MURDERERS VS SHERIFFS DUELS", "https://rawscripts.net/raw/Murderers-VS-Sheriffs-DUELS-CyberCoders-Menu-II-193913")                                                                                                                            createCard("BROOKHAVEN RP", "https://rawscripts.net/raw/Brookhaven-RP-ZAGNZ-X-207641")                             createCard("BRUTON", "https://rawscripts.net/raw/Universal-Script-Bruton-script-arab-195454") createCard("STEAL A BRAINROT", "https://rawscripts.net/raw/Universal-Script-Kurd-Hub-27356")                            createCard("THE SURVIVAL GAME", "https://rawscripts.net/raw/civilization-survival-game-LedZ-Civ-75902")                       
+SearchBar:GetPropertyChangedSignal("Text"):Connect(function()
+    local input = string.lower(SearchBar.Text)
+    for _, card in pairs(Scroll:GetChildren()) do
+        if card:IsA("Frame") then
+            card.Visible = (input == "" or string.find(string.lower(card.Name), input))
+        end
     end
 end)
-AddSetBtn("Red Theme", 70, function() if Main:FindFirstChild("RainbowGrad") then Main.RainbowGrad:Destroy() end Main.BackgroundColor3 = Color3.fromRGB(150,0,0) end)
-AddSetBtn("White Theme", 120, function() if Main:FindFirstChild("RainbowGrad") then Main.RainbowGrad:Destroy() end Main.BackgroundColor3 = Color3.fromRGB(255,255,255) end)
-AddSetBtn("Reset Rainbow", 170, function() MakeRainbow(Main,"Background") end)
 
--- 4. FUN TAB
-local FunTab = Pages["Fun"]
-AddSetBtn("Low Gravity (Moon)", 20, function() workspace.Gravity = (workspace.Gravity == 196.2) and 50 or 196.2 end).Parent = FunTab
-AddSetBtn("Super Speed", 70, function() local h = Players.LocalPlayer.Character.Humanoid h.WalkSpeed = (h.WalkSpeed == 16) and 100 or 16 end).Parent = FunTab
-local spin = false
-AddSetBtn("Spin Me!", 120, function() 
-    spin = not spin 
-    spawn(function() 
-        while spin do 
-            Players.LocalPlayer.Character.HumanoidRootPart.CFrame *= CFrame.Angles(0,math.rad(20),0) 
-            task.wait(0.01) 
-        end 
-    end) 
-end).Parent = FunTab
+-- [ 6. الإعدادات ]
+local SettingsFrame = Instance.new("Frame", ScreenGui)
+SettingsFrame.BackgroundColor3 = Color3.fromRGB(5, 5, 15); SettingsFrame.Position = UDim2.new(0.5, -140, 0.5, -160); SettingsFrame.Size = UDim2.new(0, 0, 0, 0); SettingsFrame.Visible = false; SettingsFrame.ClipsDescendants = true; Instance.new("UICorner", SettingsFrame)
+local SetStroke = Instance.new("UIStroke", SettingsFrame); SetStroke.Thickness = 2.5; SetStroke.Color = MainStroke.Color
 
--- 5. SECURITY TAB
-local SecTab = Pages["Security"]
-AddSetBtn("Anti-AFK", 20, function()
-    Players.LocalPlayer.Idled:Connect(function() 
-        game:GetService("VirtualUser"):Button2Down(Vector2.new(0,0),workspace.CurrentCamera.CFrame) 
-        wait(1) 
-        game:GetService("VirtualUser"):Button2Up(Vector2.new(0,0),workspace.CurrentCamera.CFrame) 
-    end)
-end).Parent = SecTab
-AddSetBtn("Server Hop", 70, function() game:GetService("TeleportService"):Teleport(game.PlaceId) end).Parent = SecTab
-AddSetBtn("Self Destruct", 120, function() ScreenGui:Destroy() end).Parent = SecTab
+local function updateAllColors(newColor)
+    MainStroke.Color = newColor; SetStroke.Color = newColor; SearchStroke.Color = newColor; ToggleStroke.Color = newColor; Title.TextColor3 = newColor
+    for _, s in pairs(allCardsStrokes) do s.Color = newColor end
+end
 
--- Final Logic
-local Toggle = Instance.new("TextButton", ScreenGui)
-Toggle.Size = UDim2.new(0,50,0,50)
-Toggle.Position = UDim2.new(0,20,0,50)
-Toggle.Text = "ABC"
-Toggle.TextScaled = true
-Instance.new("UICorner", Toggle).CornerRadius = UDim.new(1,0)
-MakeRainbow(Toggle,"Background")
-Drag(Toggle)
-local open = true
-Toggle.MouseButton1Click:Connect(function() open = not open Main.Visible = open end)
+local function createSetBtn(text, pos, callback)
+    local btn = Instance.new("TextButton", SettingsFrame)
+    btn.Text = text; btn.Size = UDim2.new(0.85, 0, 0, 45); btn.Position = UDim2.new(0.075, 0, 0, pos); btn.BackgroundColor3 = Color3.fromRGB(25, 25, 45); btn.TextColor3 = Color3.new(1, 1, 1); btn.Font = Enum.Font.Gotham; Instance.new("UICorner", btn); btn.MouseButton1Click:Connect(callback)
+end
+
+createSetBtn("Change Theme Color", 70, function() updateAllColors(Color3.fromHSV(math.random(), 0.8, 1)) end)
+createSetBtn("Toggle Stars", 125, function() starsActive = not starsActive; StarsContainer.Visible = starsActive end)
+createSetBtn("Reset UI Position", 180, function() MainFrame.Position = UDim2.new(0.5, -175, 0.5, -250) end)
+
+-- [ 7. أزرار التحكم ]
+local CloseBtn = Instance.new("TextButton", MainFrame)
+CloseBtn.Text = "×"; CloseBtn.Position = UDim2.new(1,-45,0,5); CloseBtn.Size = UDim2.new(0,45,0,45); CloseBtn.BackgroundTransparency = 1; CloseBtn.TextColor3 = Color3.fromRGB(255,70,70); CloseBtn.TextSize = 35
+CloseBtn.MouseButton1Click:Connect(function() MainFrame.Visible = false end)
+
+local SettingsBtn = Instance.new("TextButton", MainFrame)
+SettingsBtn.Text = "⚙"; SettingsBtn.Position = UDim2.new(1,-85,0,5); SettingsBtn.Size = UDim2.new(0,45,0,45); SettingsBtn.BackgroundTransparency = 1; SettingsBtn.TextColor3 = Color3.fromRGB(0,255,255); SettingsBtn.TextSize = 28
+SettingsBtn.MouseButton1Click:Connect(function() SettingsFrame.Visible = true; SettingsFrame:TweenSize(UDim2.new(0, 280, 0, 320), "Out", "Back", 0.4) end)
+
+local SetClose = Instance.new("TextButton", SettingsFrame)
+SetClose.Text = "×"; SetClose.Position = UDim2.new(1,-35,0,5); SetClose.Size = UDim2.new(0,35,0,35); SetClose.BackgroundTransparency = 1; SetClose.TextColor3 = Color3.fromRGB(255,70,70); SetClose.MouseButton1Click:Connect(function() SettingsFrame:TweenSize(UDim2.new(0,0,0,0), "In", "Quad", 0.3, true, function() SettingsFrame.Visible = false end) end)
+
+RunService.RenderStepped:Connect(function() ToggleGradient.Rotation = tick() * 120 end)
+print("ABC ULTIMATE HUB - ALL LINKS ACTIVE")
