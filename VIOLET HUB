@@ -1,18 +1,21 @@
 --[[
     =========================================================================
-    VIOLET HUB 💜 — v1.3.0 (Targeting Added)
+    VIOLET HUB 💜 — v1.3.1 (Targeting — Root Cause Fixed)
     =========================================================================
     Platform : Roblox (Client-Side)
     Executor : Delta Executor
 
-    v1.3.0:
-    - NEW Targeting tab: search + select + view/teleport/follow
-    - Debounced search (200ms) with token invalidation
-    - PlayerRemoving handled
-    - TargetingCleanup integrated into cleanupAll
-    - About page updated
+    v1.3.1 FIX:
+    - SuggestionsFrame no longer uses AutomaticSize.Y (conflict with parent
+      AutomaticCanvasSize caused layout computation error that aborted the
+      entire build pcall -> whole script exited).
+    - refreshTargeting / TargetingCleanup default to no-op functions.
+    - Added "Targeting page built OK" log at end of Targeting build.
 
-    v1.2.3 (retained):
+    v1.3.0:
+    - NEW Targeting tab: search + view/teleport/follow
+
+    v1.2.3:
     - TitleBar + Sidebar UICorner(16) fix
     =========================================================================
 ]]
@@ -141,7 +144,7 @@ local function main()
     }
 
     local SCRIPT_INFO = {
-        VERSION = "1.3.0",
+        VERSION = "1.3.1",
         BUILD_DATE = "2025-02-25",
         AUTHOR_ROBLOX = "hamza000599",
         AUTHOR_DISCORD = "hamza.abc0",
@@ -150,30 +153,27 @@ local function main()
 
     local CHANGELOG = {
         {
+            version = "1.3.1",
+            date = "2025-02-25",
+            items = {
+                "FIX: SuggestionsFrame AutomaticSize conflict aborted build",
+                "refreshTargeting/TargetingCleanup default to no-op",
+                "Added diagnostic log after Targeting build",
+            },
+        },
+        {
             version = "1.3.0",
             date = "2025-02-25",
             items = {
                 "NEW Targeting tab: search in-server players",
-                "Debounced search + auto-suggestions with avatars",
-                "Player card: DisplayName, Username, User ID, Account Age",
-                "View Player (copy profile URL to clipboard)",
-                "Teleport to Player (CFrame-based, may be blocked)",
-                "Follow Player toggle (Heartbeat tracking)",
-                "PlayerRemoving clears target + stops follow",
+                "Debounced search + suggestions with avatars",
+                "Player card + View/Teleport/Follow buttons",
             },
         },
         {
             version = "1.2.3",
             date = "2025-02-20",
-            items = {
-                "REAL corner fix: TitleBar + Sidebar now have UICorner(16)",
-                "All 4 corners render identically",
-            },
-        },
-        {
-            version = "1.2.2",
-            date = "2025-02-15",
-            items = { "Shadow matched Hub" },
+            items = { "REAL corner fix: TitleBar + Sidebar UICorner(16)" },
         },
     }
 
@@ -886,8 +886,8 @@ local function main()
             spin = {on = false, instance = nil},
             follow = {on = false, target = nil, conn = nil},
         }
-        local TargetingCleanup = nil
-        local refreshTargeting = nil
+        local TargetingCleanup = function() end
+        local refreshTargeting = function() end
         
         local startTick = tick()
         
@@ -1142,7 +1142,7 @@ local function main()
                     state[k].on = false
                 end
             end
-            if TargetingCleanup then pcall(TargetingCleanup) end
+            pcall(TargetingCleanup)
         end
 
         local HomePage = makePage("HOME")
@@ -1607,7 +1607,7 @@ local function main()
             new("TextLabel", {
                 Size = UDim2.new(1, 0, 0, 18),
                 BackgroundTransparency = 1,
-                Text = "v" .. entry.version .. "  •  " .. entry.date,
+                Text = "v" .. entry.version .. "  -  " .. entry.date,
                 TextColor3 = C.Colors.AccentGlow,
                 TextSize = 11,
                 Font = C.Fonts.Bold,
@@ -1619,7 +1619,7 @@ local function main()
                 new("TextLabel", {
                     Size = UDim2.new(1, 0, 0, 16),
                     BackgroundTransparency = 1,
-                    Text = "• " .. item,
+                    Text = "* " .. item,
                     TextColor3 = C.Colors.TextSecond,
                     TextSize = 10,
                     Font = C.Fonts.Body,
@@ -1803,7 +1803,7 @@ local function main()
         addStagger(DiscordCard)
 
         -- ============================================================
-        -- 🎯 TARGETING PAGE (NEW)
+        -- TARGETING PAGE (v1.3.1 - fixed)
         -- ============================================================
         local TargetingPage = makePage("TARGETING")
         local TargetingScroll = makeScrollingPage(TargetingPage)
@@ -1824,7 +1824,7 @@ local function main()
             Size = UDim2.fromOffset(20, 20),
             Position = UDim2.new(0, 12, 0.5, -10),
             BackgroundTransparency = 1,
-            Text = "?",
+            Text = "Q",
             TextColor3 = C.Colors.AccentGlow,
             TextSize = 14,
             Font = C.Fonts.Bold
@@ -1856,16 +1856,28 @@ local function main()
             LayoutOrder = 3
         }, TargetingScroll)
 
+        -- No AutomaticSize here: explicit size updated by updateSuggestionsSize()
         local SuggestionsFrame = new("Frame", {
             Size = UDim2.new(1, 0, 0, 0),
             BackgroundTransparency = 1,
             LayoutOrder = 4
         }, TargetingScroll)
-        pcall(function() SuggestionsFrame.AutomaticSize = Enum.AutomaticSize.Y end)
         new("UIListLayout", {
             Padding = UDim.new(0, 5),
             SortOrder = Enum.SortOrder.LayoutOrder
         }, SuggestionsFrame)
+
+        local function updateSuggestionsSize()
+            local count = 0
+            for _, c in ipairs(SuggestionsFrame:GetChildren()) do
+                if c:IsA("TextButton") then count = count + 1 end
+            end
+            local total = 0
+            if count > 0 then
+                total = count * 48 + (count - 1) * 5
+            end
+            SuggestionsFrame.Size = UDim2.new(1, 0, 0, total)
+        end
 
         makeSectionHeader(TargetingScroll, 5, "TARGET PLAYER")
 
@@ -1905,7 +1917,7 @@ local function main()
             Size = UDim2.new(1, -90, 0, 16),
             Position = UDim2.new(0, 82, 0, 30),
             BackgroundTransparency = 1,
-            Text = "@—",
+            Text = "@-",
             TextColor3 = C.Colors.TextSecond,
             TextSize = 12,
             Font = C.Fonts.Body,
@@ -1916,7 +1928,7 @@ local function main()
             Size = UDim2.new(1, -90, 0, 14),
             Position = UDim2.new(0, 82, 0, 46),
             BackgroundTransparency = 1,
-            Text = "ID: —",
+            Text = "ID: -",
             TextColor3 = C.Colors.AccentGlow,
             TextSize = 10,
             Font = C.Fonts.Mono,
@@ -1927,7 +1939,7 @@ local function main()
             Size = UDim2.new(1, -90, 0, 14),
             Position = UDim2.new(0, 82, 0, 62),
             BackgroundTransparency = 1,
-            Text = "Age: —",
+            Text = "Age: -",
             TextColor3 = C.Colors.TextDim,
             TextSize = 10,
             Font = C.Fonts.Mono,
@@ -1956,7 +1968,7 @@ local function main()
         new("TextLabel", {
             Size = UDim2.new(1, 0, 0, 60),
             BackgroundTransparency = 1,
-            Text = "• Search shows players currently in this server.\n• Teleport/Follow may be blocked by game anti-cheat.\n• View Player copies the profile URL to clipboard.",
+            Text = "* Search shows players currently in this server.\n* Teleport/Follow may be blocked by game anti-cheat.\n* View Player copies the profile URL to clipboard.",
             TextColor3 = C.Colors.TextDim,
             TextSize = 10,
             Font = C.Fonts.Body,
@@ -1970,8 +1982,9 @@ local function main()
 
         local function clearSuggestions()
             for _, c in ipairs(SuggestionsFrame:GetChildren()) do
-                if c:IsA("GuiObject") then c:Destroy() end
+                if c:IsA("TextButton") then c:Destroy() end
             end
+            updateSuggestionsSize()
         end
 
         local function loadAvatar(imageLabel, userId, size)
@@ -1994,11 +2007,7 @@ local function main()
             TargetUserId.Text = "ID: " .. tostring(player.UserId)
             local okAge, age = pcall(function() return player.AccountAge end)
             if okAge and type(age) == "number" then
-                local dateStr = "N/A"
-                pcall(function()
-                    dateStr = os.date("%Y-%m-%d", os.time() - age * 86400)
-                end)
-                TargetAge.Text = string.format("Age: %d days (~%s)", age, dateStr)
+                TargetAge.Text = string.format("Age: %d days", age)
             else
                 TargetAge.Text = "Age: N/A"
             end
@@ -2055,11 +2064,12 @@ local function main()
             pcall(function()
                 c.MouseButton1Click:Connect(function() selectTarget(player) end)
             end)
+            updateSuggestionsSize()
         end
 
         local function performSearch(query)
             clearSuggestions()
-            local q = query:lower():gsub("^%s+", ""):gsub("%s+$", "")
+            local q = string.lower(query):gsub("^%s+", ""):gsub("%s+$", "")
             if #q == 0 then
                 SearchStatus.Text = "Type to search players in this server"
                 SearchStatus.TextColor3 = C.Colors.TextDim
@@ -2080,7 +2090,7 @@ local function main()
                 SearchStatus.Text = "No players found in server"
                 SearchStatus.TextColor3 = C.Colors.Yellow
             else
-                SearchStatus.Text = #matches .. " player(s) found — tap to select"
+                SearchStatus.Text = tostring(#matches) .. " player(s) found - tap to select"
                 SearchStatus.TextColor3 = C.Colors.Green
                 for i, p in ipairs(matches) do
                     makeSuggestionCard(p, i)
@@ -2089,7 +2099,7 @@ local function main()
         end
 
         refreshTargeting = function()
-            pcall(performSearch, SearchBox.Text or "")
+            performSearch(SearchBox.Text)
         end
 
         pcall(function()
@@ -2204,9 +2214,9 @@ local function main()
                 if selectedTarget == p then
                     selectedTarget = nil
                     TargetDisplay.Text = "No target"
-                    TargetUsername.Text = "@—"
-                    TargetUserId.Text = "ID: —"
-                    TargetAge.Text = "Age: —"
+                    TargetUsername.Text = "@-"
+                    TargetUserId.Text = "ID: -"
+                    TargetAge.Text = "Age: -"
                     TargetAvatar.Image = ""
                     toast("Target left the game", C.Colors.Yellow)
                 end
@@ -2215,6 +2225,9 @@ local function main()
                 end
             end)
         end)
+
+        updateSuggestionsSize()
+        log("Targeting page built OK")
         -- ============================================================
         -- END TARGETING PAGE
         -- ============================================================
@@ -2439,8 +2452,8 @@ local function main()
             }, c)
         end
         
-        makeAboutSection(1, "VIOLET HUB", "Version " .. SCRIPT_INFO.VERSION .. " — Premium Visual Effects. Developer: " .. SCRIPT_INFO.AUTHOR_ROBLOX, 64)
-        makeAboutSection(2, "FEATURES", "• Player & server info\n• Live FPS / Ping / Player count\n• 11 working PLAYER toggles\n• Targeting: search + view/teleport/follow\n• SCRIPT STATISTICS + UPDATES\n• DEVELOPER + SOCIAL LINKS\n• Blur, particles, premium edges\n• Draggable, scrollable, animated", 176)
+        makeAboutSection(1, "VIOLET HUB", "Version " .. SCRIPT_INFO.VERSION .. " - Premium Visual Effects. Developer: " .. SCRIPT_INFO.AUTHOR_ROBLOX, 64)
+        makeAboutSection(2, "FEATURES", "* Player & server info\n* Live FPS / Ping / Player count\n* 11 working PLAYER toggles\n* Targeting: search + view/teleport/follow\n* SCRIPT STATISTICS + UPDATES\n* DEVELOPER + SOCIAL LINKS\n* Blur, particles, premium edges\n* Draggable, scrollable, animated", 176)
         makeAboutSection(3, "LIMITATIONS", "Blur needs Lighting access. Particles are client-side. Hide Player is local. Fly is PC-optimized. Discord copy needs clipboard. Targeting searches only in-server players. Teleport/Follow may be blocked by game anti-cheat.", 100)
 
         local TABS = {
@@ -2544,7 +2557,7 @@ local function main()
             pcall(function()
                 r.button.MouseButton1Click:Connect(function()
                     switchTab(name)
-                    if name == "TARGETING" and refreshTargeting then pcall(refreshTargeting) end
+                    if name == "TARGETING" then refreshTargeting() end
                 end)
             end)
         end
