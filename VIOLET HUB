@@ -1,20 +1,18 @@
 --[[
     =========================================================================
-    VIOLET HUB 💜 — v1.2.4 (Instant Targeting Search + Player Actions)
+    VIOLET HUB 💜 — v1.2.5 (Targeting View Toggle + Instant Teleport)
     =========================================================================
     Platform : Roblox (Client-Side)
     Executor : Delta Executor
 
-    CHANGES vs v1.2.3:
-    - TARGETING page rebuilt:
-        • Instant search (min 2 chars) with 400ms debounce
-        • Local server match first, then Roblox API exact match
-        • Result cards: avatar + DisplayName + Username + ID + ONLINE status
-        • Tap result → full Detail Card with actions
-        • Actions: Open Profile / Copy ID / Refresh Info (always)
-                   View Player / Go to Player (only if in this server)
-        • Disabled buttons show a toast instead of faking functionality
-    - No removed features, no duplicated logic, all effects preserved.
+    FIXES vs v1.2.4:
+    - View Player now toggles: press to view, press again to stop.
+    - Original CameraSubject is saved and restored on stop.
+    - Monitor disconnects when target leaves; camera auto-restores.
+    - Auto-switches view when user picks another player while viewing.
+    - stopViewing() is called on tab switch away from TARGETING and on hideHub.
+    - Go to Player uses Character:PivotTo() for instant teleport (no walking).
+    - Verifies teleport within 0.5s and shows "blocked by game" if snapped back.
     =========================================================================
 ]]
 
@@ -146,8 +144,8 @@ local function main()
     }
 
     local SCRIPT_INFO = {
-        VERSION = "1.2.4",
-        BUILD_DATE = "2025-02-22",
+        VERSION = "1.2.5",
+        BUILD_DATE = "2025-02-23",
         AUTHOR_ROBLOX = "hamza000599",
         AUTHOR_DISCORD = "hamza.abc0",
         DISCORD_LINK = "https://discord.gg/xzNRnKyVd",
@@ -155,21 +153,22 @@ local function main()
 
     local CHANGELOG = {
         {
+            version = "1.2.5",
+            date = "2025-02-23",
+            items = {
+                "View Player toggles: press to view, press again to stop",
+                "Original CameraSubject saved/restored on stop",
+                "Auto-switch view when picking another player while viewing",
+                "Go to Player now uses Character:PivotTo() instant teleport",
+                "Teleport verified after 0.5s; 'blocked' toast if rejected",
+            },
+        },
+        {
             version = "1.2.4",
             date = "2025-02-22",
             items = {
                 "TARGETING rebuilt with instant search (min 2 chars)",
-                "Local match first, then Roblox API exact lookup",
-                "Detail card with View/Go/Copy/Profile/Refresh actions",
-                "Disabled buttons show toast instead of fake functionality",
-            },
-        },
-        {
-            version = "1.2.3",
-            date = "2025-02-20",
-            items = {
-                "REAL corner fix: TitleBar + Sidebar now have UICorner(16)",
-                "All 4 corners render identically now",
+                "Detail card with action buttons",
             },
         },
     }
@@ -1790,7 +1789,7 @@ local function main()
         addStagger(DiscordCard)
 
         -- =============================================================
-        -- صفحة اللاعبين (Player Page)
+        -- صفحة اللاعبين
         -- =============================================================
         local PlayerPage = makePage("PLAYER")
         local PlayerScroll = makeScrollingPage(PlayerPage)
@@ -1911,12 +1910,11 @@ local function main()
         end)
 
         -- =============================================================
-        -- 🎯 صفحة الاستهداف (Targeting Page) — v1.2.4 Instant Search
+        -- 🎯 صفحة الاستهداف — v1.2.5
         -- =============================================================
         local TargetingPage = makePage("TARGETING")
         local TargetingScroll = makeScrollingPage(TargetingPage)
 
-        -- حقل البحث
         local searchCard = new("Frame", {
             Size = UDim2.new(1, 0, 0, 88),
             BackgroundColor3 = C.Colors.Surface,
@@ -1966,7 +1964,6 @@ local function main()
             TextXAlignment = Enum.TextXAlignment.Left
         }, searchCard)
 
-        -- حاوية النتائج
         local resultsFrame = new("Frame", {
             Size = UDim2.new(1, 0, 0, 0),
             BackgroundTransparency = 1,
@@ -1987,9 +1984,114 @@ local function main()
             end
         end
 
-        -- ============ بطاقة التفاصيل الكاملة ============
+        -- ============ حالة المشاهدة (v1.2.5) ============
+        local viewState = {
+            active = false,
+            originalSubject = nil,
+            targetPlayer = nil,
+            button = nil,
+            monitorConn = nil,
+        }
+
+        local function setViewButtonState(btn, isViewing)
+            if not btn or not btn.Parent then return end
+            btn.Text = isViewing and "STOP VIEWING" or "VIEW PLAYER"
+            btn.BackgroundColor3 = isViewing and C.Colors.Close or C.Colors.AccentDeep
+            btn.TextColor3 = isViewing and C.Colors.Text or C.Colors.AccentGlow
+            btn.BackgroundTransparency = 0.2
+        end
+
+        local function restoreCamera()
+            local cam = workspace.CurrentCamera
+            if cam and viewState.originalSubject then
+                pcall(function() cam.CameraSubject = viewState.originalSubject end)
+            end
+            viewState.originalSubject = nil
+        end
+
+        local function stopViewing(showToast, keepOriginal)
+            if not viewState.active then return end
+            viewState.active = false
+            if viewState.monitorConn then
+                pcall(function() viewState.monitorConn:Disconnect() end)
+                viewState.monitorConn = nil
+            end
+            if not keepOriginal then
+                restoreCamera()
+            end
+            setViewButtonState(viewState.button, false)
+            if showToast then toast("View stopped", C.Colors.TextSecond) end
+            viewState.targetPlayer = nil
+            viewState.button = nil
+        end
+
+        local function startViewing(player, btn, overrideOriginal)
+            local cam = workspace.CurrentCamera
+            if not cam then return end
+            local char = player and player.Character
+            if not char then
+                toast("Character not ready", C.Colors.Close)
+                return
+            end
+            local hum = char:FindFirstChildOfClass("Humanoid")
+            if not hum then
+                toast("Character not ready", C.Colors.Close)
+                return
+            end
+            if overrideOriginal ~= nil then
+                viewState.originalSubject = overrideOriginal
+            elseif viewState.originalSubject == nil then
+                viewState.originalSubject = cam.CameraSubject
+            end
+            viewState.active = true
+            viewState.targetPlayer = player
+            viewState.button = btn
+            cam.CameraSubject = hum
+            setViewButtonState(btn, true)
+            toast("Viewing " .. player.Name, C.Colors.Green)
+
+            if viewState.monitorConn then
+                pcall(function() viewState.monitorConn:Disconnect() end)
+            end
+            pcall(function()
+                viewState.monitorConn = RunService.Heartbeat:Connect(function()
+                    if not viewState.active then return end
+                    local p = viewState.targetPlayer
+                    if not p or not p.Parent or not p.Character then
+                        stopViewing(false)
+                        toast("Target left — view stopped", C.Colors.Yellow)
+                    end
+                end)
+            end)
+        end
+
+        -- ============ بطاقة التفاصيل ============
         local selectedCard = nil
         local function showPlayerDetail(userInfo, isInServer)
+            local wasViewing = viewState.active
+            local preservedSubject = viewState.originalSubject
+            local inServerPlayer = Players:GetPlayerByUserId(userInfo.Id)
+
+            if viewState.monitorConn then
+                pcall(function() viewState.monitorConn:Disconnect() end)
+                viewState.monitorConn = nil
+            end
+
+            viewState.active = false
+            viewState.targetPlayer = nil
+            viewState.button = nil
+            viewState.originalSubject = nil
+
+            -- لو كان يتابع ولا يزال الهدف بالسيرفر → احتفظ بالـ originalSubject
+            -- لو كان يتابع ولم يعد الهدف بالسيرفر → استعد الكاميرا فوراً
+            if wasViewing and not inServerPlayer then
+                if preservedSubject then
+                    local cam = workspace.CurrentCamera
+                    if cam then pcall(function() cam.CameraSubject = preservedSubject end) end
+                end
+                preservedSubject = nil
+            end
+
             if selectedCard then selectedCard:Destroy(); selectedCard = nil end
 
             local card = new("Frame", {
@@ -2142,44 +2244,90 @@ local function main()
                     if ok and infos and #infos > 0 then
                         toast("Info refreshed", C.Colors.Green)
                         local newInfo = infos[1]
-                        local inServer = Players:GetPlayerByUserId(userInfo.Id) ~= nil
-                        showPlayerDetail(newInfo, inServer)
+                        local inSrv = Players:GetPlayerByUserId(userInfo.Id) ~= nil
+                        showPlayerDetail(newInfo, inSrv)
                     else
                         toast("Refresh failed (API limit?)", C.Colors.Close)
                     end
                 end)
             end)
 
-            local inServerPlayer = Players:GetPlayerByUserId(userInfo.Id)
-            makeActionBtn(4, "VIEW PLAYER", inServerPlayer ~= nil, function()
-                if inServerPlayer and inServerPlayer.Character then
-                    local hum = inServerPlayer.Character:FindFirstChildOfClass("Humanoid")
-                    if hum then
-                        workspace.CurrentCamera.CameraSubject = hum
-                        toast("Spectating " .. inServerPlayer.Name, C.Colors.Green)
-                    else
-                        toast("Character not ready", C.Colors.Close)
-                    end
+            -- ============ View Player (Toggle) — v1.2.5 ============
+            local viewBtn
+            viewBtn = makeActionBtn(4, "VIEW PLAYER", inServerPlayer ~= nil, function()
+                local currentPlayer = Players:GetPlayerByUserId(userInfo.Id)
+                if not currentPlayer then
+                    toast("Player not in this server", C.Colors.Yellow)
+                    return
+                end
+                if viewState.active and viewState.targetPlayer == currentPlayer then
+                    stopViewing(true)
+                else
+                    local keepSubj = viewState.originalSubject
+                    if viewState.active then stopViewing(false, true) end
+                    startViewing(currentPlayer, viewBtn, keepSubj)
                 end
             end, "Player not in this server — cannot spectate")
 
-            makeActionBtn(5, "GO TO PLAYER", inServerPlayer ~= nil, function()
-                if inServerPlayer and inServerPlayer.Character then
-                    local targetRoot = inServerPlayer.Character:FindFirstChild("HumanoidRootPart")
-                    local myHum = getHum()
-                    if targetRoot and myHum then
-                        myHum:MoveTo(targetRoot.Position)
-                        toast("Moving to " .. inServerPlayer.Name, C.Colors.Green)
-                    else
-                        toast("Cannot move right now", C.Colors.Close)
-                    end
+            -- ============ Go to Player (Instant Teleport) — v1.2.5 ============
+            makeActionBtn(5, "TELEPORT TO PLAYER", inServerPlayer ~= nil, function()
+                local currentPlayer = Players:GetPlayerByUserId(userInfo.Id)
+                if not currentPlayer then
+                    toast("Player not in this server", C.Colors.Yellow)
+                    return
                 end
-            end, "Player not in this server — cannot walk to them")
+                local myChar = LP.Character
+                if not myChar then
+                    toast("Your character not ready", C.Colors.Close)
+                    return
+                end
+                local targetChar = currentPlayer.Character
+                if not targetChar then
+                    toast("Target character not ready", C.Colors.Close)
+                    return
+                end
+                local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
+                local myRoot = myChar:FindFirstChild("HumanoidRootPart")
+                if not targetRoot or not myRoot then
+                    toast("Root parts missing", C.Colors.Close)
+                    return
+                end
+                local destPos = targetRoot.Position + Vector3.new(0, 3, 0)
+                local oldPos = myRoot.Position
+                -- Official instant teleport (no walking)
+                local ok = pcall(function()
+                    myChar:PivotTo(CFrame.new(destPos))
+                end)
+                if not ok then
+                    ok = pcall(function()
+                        myRoot.CFrame = CFrame.new(destPos)
+                    end)
+                end
+                if not ok then
+                    toast("Teleport not supported here", C.Colors.Close)
+                    return
+                end
+                toast("Teleported to " .. currentPlayer.Name, C.Colors.Green)
+                -- Verify server accepted (anti-cheat may snap back)
+                task.delay(0.5, function()
+                    if myRoot and myRoot.Parent then
+                        local moved = (myRoot.Position - oldPos).Magnitude
+                        if moved < 3 then
+                            toast("Teleport blocked by game", C.Colors.Yellow)
+                        end
+                    end
+                end)
+            end, "Player not in this server")
+
+            -- إذا كنا نشاهد سابقاً واخترنا لاعباً آخر في السيرفر → بدّل المشاهدة تلقائياً
+            if wasViewing and inServerPlayer then
+                startViewing(inServerPlayer, viewBtn, preservedSubject)
+            end
 
             selectedCard = card
         end
 
-        -- ============ بطاقة نتيجة بحث مصغرة ============
+        -- ============ بطاقة نتيجة البحث ============
         local function createResultCard(userInfo, order, isInServer)
             local card = new("Frame", {
                 Name = "ResultCard",
@@ -2288,7 +2436,6 @@ local function main()
             searchStatus.Text = "Searching..."
             searchStatus.TextColor3 = C.Colors.AccentGlow
 
-            -- 1) البحث المحلي أولاً
             local localMatches = {}
             local qLower = query:lower()
             for _, plr in ipairs(Players:GetPlayers()) do
@@ -2314,7 +2461,6 @@ local function main()
                 return
             end
 
-            -- 2) البحث عبر API (اسم كامل)
             task.spawn(function()
                 local ok, userId = pcall(function()
                     return Players:GetUserIdFromNameAsync(query)
@@ -2347,7 +2493,7 @@ local function main()
             searchBox:GetPropertyChangedSignal("Text"):Connect(function()
                 local txt = searchBox.Text
                 if #txt < 2 then
-                    searchDebounce = tick() -- cancel any pending debounce
+                    searchDebounce = tick()
                     doSearch(txt)
                     return
                 end
@@ -2361,7 +2507,7 @@ local function main()
         end)
 
         -- =============================================================
-        -- صفحة الإعدادات (Settings Page)
+        -- صفحة الإعدادات
         -- =============================================================
         local SettingsPage = makePage("SETTINGS")
         local SettingsScroll = makeScrollingPage(SettingsPage)
@@ -2429,7 +2575,7 @@ local function main()
         }, SettingsScroll)
 
         -- =============================================================
-        -- صفحة حول (About Page)
+        -- صفحة حول
         -- =============================================================
         local AboutPage = makePage("ABOUT")
         local AboutScroll = makeScrollingPage(AboutPage)
@@ -2469,8 +2615,8 @@ local function main()
         end
         
         makeAboutSection(1, "VIOLET HUB", "Version " .. SCRIPT_INFO.VERSION .. " — Premium Visual Effects. Developer: " .. SCRIPT_INFO.AUTHOR_ROBLOX, 64)
-        makeAboutSection(2, "FEATURES", "• Player & server info\n• Live FPS / Ping / Player count\n• 11 working PLAYER toggles\n• Instant Targeting search\n• View/Go to player (in-server)\n• Copy profile / ID / refresh\n• Draggable, scrollable, animated", 158)
-        makeAboutSection(3, "LIMITATIONS", "Instant search is local-first (server members). For non-members, exact username is required due to Roblox API limits. View/Go work only for players in the same server. Open Profile copies the URL to clipboard.", 92)
+        makeAboutSection(2, "FEATURES", "• Player & server info\n• Live FPS / Ping / Player count\n• 11 working PLAYER toggles\n• Instant Targeting search\n• View Player toggles ON/OFF\n• Instant Teleport to player\n• Copy profile / ID / refresh\n• Draggable, scrollable, animated", 158)
+        makeAboutSection(3, "LIMITATIONS", "View/Teleport only work for players in the same server. Teleport uses Character:PivotTo() — if the server blocks it, you'll see 'blocked by game'. Instant search is local-first; for non-members, exact username is required by Roblox API.", 92)
 
         -- =============================================================
         -- نظام التبويبات
@@ -2551,6 +2697,10 @@ local function main()
         local function switchTab(name)
             if not Pages[name] then return end
             if CurrentPage == name then return end
+            -- v1.2.5: أوقف المشاهدة عند مغادرة TARGETING
+            if CurrentPage == "TARGETING" and name ~= "TARGETING" then
+                pcall(function() stopViewing(false) end)
+            end
             local oldPage = CurrentPage and Pages[CurrentPage]
             CurrentPage = name
             for tn in pairs(TabRefs) do applyTabVisual(tn) end
@@ -2628,6 +2778,8 @@ local function main()
                 if afterFn then pcall(afterFn) end
                 return
             end
+            -- v1.2.5: أوقف المشاهدة عند إخفاء الهب
+            pcall(function() stopViewing(false) end)
             closing = true
             hubVisible = false
             savedPosition = Hub.Position
@@ -2832,6 +2984,7 @@ local function main()
                     running = false
                     pcall(cleanupAll)
                     pcall(stopRain)
+                    pcall(function() stopViewing(false) end)
                     if HubBlur then pcall(function() HubBlur:Destroy() end); HubBlur = nil end
                     if backdropOverlay then pcall(function() backdropOverlay:Destroy() end) end
                     if HubShadow then pcall(function() HubShadow:Destroy() end); HubShadow = nil end
