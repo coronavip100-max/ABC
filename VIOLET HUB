@@ -1,8 +1,7 @@
---!strict
+--!nonstrict
 --==================================================================
---  ✦ LYNEX HUB v2.2 ✦
---  Home • News • Settings  |  Auto-open  |  Compact  |  Purple
---  Sidebar starts OPEN on all devices.
+--  ✦ LYNEX HUB v2.3 ✦
+--  Home (scrolling) • News • Settings  |  Mobile  |  Purple
 --==================================================================
 
 local Players          = game:GetService("Players")
@@ -115,6 +114,85 @@ local EASE = {
 }
 
 --==================================================================
+-- 3.1) Toast (مبكر لاستخدامه في Home)
+--==================================================================
+local function showToast(message)
+    local toast = create("Frame", {
+        Name = "Toast",
+        Size = UDim2.fromOffset(240, 40),
+        Position = UDim2.new(0.5, -120, 0, -58),
+        BackgroundColor3 = THEME.BG_CARD,
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        ZIndex = 100,
+    }, screenGui or playerGui)
+    addCorner(12, toast)
+    local toastStroke = addStroke(THEME.P_BRIGHT, 1, 1, toast)
+    local label = create("TextLabel", {
+        Size = UDim2.fromScale(1, 1),
+        BackgroundTransparency = 1,
+        Text = message,
+        Font = FONT.Bold, TextSize = 12,
+        TextColor3 = THEME.TX_MAIN,
+        TextTransparency = 1,
+        TextXAlignment = Enum.TextXAlignment.Center,
+        ZIndex = 101,
+    }, toast)
+
+    tween(toast, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+        Position = UDim2.new(0.5, -120, 0, 20),
+        BackgroundTransparency = 0.02,
+    })
+    tween(toastStroke, TweenInfo.new(0.3), { Transparency = 0.4 })
+    tween(label, TweenInfo.new(0.3), { TextTransparency = 0 })
+
+    task.delay(2.4, function()
+        if not toast or not toast.Parent then return end
+        tween(toast, TweenInfo.new(0.3), {
+            Position = UDim2.new(0.5, -120, 0, -58),
+            BackgroundTransparency = 1,
+        })
+        tween(toastStroke, TweenInfo.new(0.3), { Transparency = 1 })
+        tween(label, TweenInfo.new(0.3), { TextTransparency = 1 })
+        task.delay(0.35, function()
+            if toast then toast:Destroy() end
+        end)
+    end)
+end
+
+local function copyText(text, label)
+    local ok = false
+    if typeof(setclipboard) == "function" then
+        local success = pcall(setclipboard, text)
+        ok = success
+    end
+    if ok then
+        showToast("✦ " .. (label or "Copied"))
+    else
+        showToast("✦ " .. text)
+    end
+    return ok
+end
+
+local function openURL(url)
+    if typeof(openbrowser) == "function" then
+        local ok = pcall(openbrowser, url)
+        if ok then
+            showToast("◈ Opening Discord…")
+            return
+        end
+    end
+    if typeof(setclipboard) == "function" then
+        local ok = pcall(setclipboard, url)
+        if ok then
+            showToast("◈ Link copied — paste in browser")
+            return
+        end
+    end
+    showToast("◈ " .. url)
+end
+
+--==================================================================
 -- 4) تنظيف النسخة السابقة
 --==================================================================
 local guiParent = resolveGuiParent()
@@ -155,6 +233,12 @@ local screenGui = create("ScreenGui", {
     ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
     DisplayOrder = 999,
 }, guiParent)
+
+-- إعادة ربط Toast بـ screenGui الحقيقي
+do
+    local oldToast = playerGui:FindFirstChild("LYNEX_HUB")
+    if oldToast and oldToast ~= screenGui then oldToast:Destroy() end
+end
 
 local winW, winH = computeWindowSize()
 
@@ -383,29 +467,50 @@ for i, tab in ipairs(TABS) do
 end
 
 --==================================================================
--- 11) إنشاء الصفحات
+-- 11) إنشاء الصفحات (home تصبح ScrollingFrame)
 --==================================================================
-local function createPage(id)
-    local page = create("Frame", {
+local function createPage(id, scrolling)
+    local class = scrolling and "ScrollingFrame" or "Frame"
+    local props = {
         Name = id .. "Page",
         Size = UDim2.fromScale(1, 1),
         BackgroundTransparency = 1,
         Visible = false,
+        BorderSizePixel = 0,
         ZIndex = 4,
-    }, pagesContainer)
+    }
+    if scrolling then
+        props.ScrollBarThickness = 3
+        props.ScrollBarImageColor3 = THEME.P_BRIGHT
+        props.CanvasSize = UDim2.new(0, 0, 0, 0)
+        props.AutomaticCanvasSize = Enum.AutomaticSize.Y
+        props.ScrollingDirection = Enum.ScrollingDirection.Y
+    end
+    local page = create(class, props, pagesContainer)
     tabPages[id] = page
     return page
 end
 
 --==================================================================
--- 12) صفحة Home
+-- 12) صفحة Home — ScrollingFrame + UIListLayout
 --==================================================================
-local homePage = createPage("home")
+local homePage = createPage("home", true)
+create("UIListLayout", {
+    Padding = UDim.new(0, 10),
+    SortOrder = Enum.SortOrder.LayoutOrder,
+}, homePage)
+create("UIPadding", {
+    PaddingTop = UDim.new(0, 2),
+    PaddingBottom = UDim.new(0, 10),
+    PaddingRight = UDim.new(0, 6),
+}, homePage)
 
+-- ── Hero ─────────────────────────────────────────────────────
 local hero = create("Frame", {
     Name = "Hero",
     Size = UDim2.new(1, 0, 0, 68),
     BackgroundTransparency = 1,
+    LayoutOrder = 1,
     ZIndex = 4,
 }, homePage)
 
@@ -429,7 +534,7 @@ addGradient(logo, {
 }, 90)
 create("UITextSizeConstraint", { MaxTextSize = 26, MinTextSize = 18 }, logo)
 
-local tagline = create("TextLabel", {
+create("TextLabel", {
     Size = UDim2.new(1, 0, 0, 16),
     Position = UDim2.new(0, 0, 0, 44),
     BackgroundTransparency = 1,
@@ -440,14 +545,14 @@ local tagline = create("TextLabel", {
     ZIndex = 5,
 }, hero)
 
+-- ── Profile Card ─────────────────────────────────────────────
 local profileCard = create("Frame", {
     Name = "ProfileCard",
     Size = UDim2.new(1, 0, 0, 90),
-    AnchorPoint = Vector2.new(0, 0.5),
-    Position = UDim2.new(0, 0, 0.5, 34),
     BackgroundColor3 = THEME.BG_CARD,
     BackgroundTransparency = 0.05,
     BorderSizePixel = 0,
+    LayoutOrder = 2,
     ZIndex = 4,
 }, homePage)
 addCorner(12, profileCard)
@@ -530,6 +635,237 @@ end
 local uidLbl = smallInfo(infoX, 95, "#", "—")
 local ageLbl = smallInfo(infoX + 100, 95, "◷", "—")
 
+-- ── Developer Info Card ──────────────────────────────────────
+local devCard = create("Frame", {
+    Name = "DevCard",
+    Size = UDim2.new(1, 0, 0, 100),
+    BackgroundColor3 = THEME.BG_CARD,
+    BackgroundTransparency = 0.05,
+    BorderSizePixel = 0,
+    LayoutOrder = 3,
+    ZIndex = 4,
+}, homePage)
+addCorner(12, devCard)
+addStroke(THEME.BORDER, 1, 0.15, devCard)
+
+create("TextLabel", {
+    Size = UDim2.new(1, -20, 0, 22),
+    Position = UDim2.new(0, 12, 0, 8),
+    BackgroundTransparency = 1,
+    Text = "✦  DEVELOPER INFO",
+    Font = FONT.Bold, TextSize = 12,
+    TextColor3 = THEME.P_GLOW,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    ZIndex = 5,
+}, devCard)
+
+-- صف قابل للنسخ (Roblox / Discord)
+local function makeCopyRow(parent, order, iconText, prefix, valueText, copyPayload, copyLabel)
+    local row = create("TextButton", {
+        Size = UDim2.new(1, -20, 0, 28),
+        Position = UDim2.new(0, 10, 0, 34 + order * 30),
+        BackgroundColor3 = THEME.BG_CARD_HI,
+        BackgroundTransparency = 0.7,
+        AutoButtonColor = false,
+        Text = "",
+        ZIndex = 5,
+    }, parent)
+    addCorner(6, row)
+    addStroke(THEME.BORDER, 1, 0.4, row)
+
+    create("TextLabel", {
+        Size = UDim2.fromOffset(20, 28),
+        Position = UDim2.new(0, 4, 0, 0),
+        BackgroundTransparency = 1,
+        Text = iconText,
+        Font = FONT.Bold, TextSize = 12,
+        TextColor3 = THEME.P_GLOW,
+        ZIndex = 6,
+    }, row)
+
+    create("TextLabel", {
+        Size = UDim2.new(0, 66, 1, 0),
+        Position = UDim2.new(0, 26, 0, 0),
+        BackgroundTransparency = 1,
+        Text = prefix,
+        Font = FONT.Medium, TextSize = 10,
+        TextColor3 = THEME.TX_SUBTLE,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 6,
+    }, row)
+
+    create("TextLabel", {
+        Size = UDim2.new(1, -112, 1, 0),
+        Position = UDim2.new(0, 96, 0, 0),
+        BackgroundTransparency = 1,
+        Text = valueText,
+        Font = FONT.Bold, TextSize = 11,
+        TextColor3 = THEME.TX_MAIN,
+        TextXAlignment = Enum.TextXAlignment.Right,
+        TextTruncate = Enum.TextTruncate.AtEnd,
+        ZIndex = 6,
+    }, row)
+
+    create("TextLabel", {
+        Size = UDim2.fromOffset(16, 28),
+        Position = UDim2.new(1, -20, 0, 0),
+        BackgroundTransparency = 1,
+        Text = "⧉",
+        Font = FONT.Bold, TextSize = 11,
+        TextColor3 = THEME.P_GLOW,
+        TextTransparency = 0.3,
+        ZIndex = 6,
+    }, row)
+
+    row.MouseButton1Click:Connect(function()
+        copyText(copyPayload, copyLabel)
+    end)
+
+    -- تحويم بسيط (فقط على الكمبيوتر)
+    row.MouseEnter:Connect(function()
+        tween(row, TweenInfo.new(0.15), { BackgroundTransparency = 0.3 })
+    end)
+    row.MouseLeave:Connect(function()
+        tween(row, TweenInfo.new(0.15), { BackgroundTransparency = 0.7 })
+    end)
+
+    return row
+end
+
+makeCopyRow(devCard, 0, "◆", "Roblox",  "hamza000599",  "hamza000599",  "Roblox username copied")
+makeCopyRow(devCard, 1, "◈", "Discord", "hamza.abc0",    "hamza.abc0",    "Discord username copied")
+
+-- ── Script Information Card ─────────────────────────────────
+local SCRIPT_INFO = {
+    { icon = "✦", label = "Script Name",     value = "LYNEX HUB" },
+    { icon = "◆", label = "Version",         value = "V1.0.0" },
+    { icon = "◉", label = "Developer",       value = "hamza000599" },
+    { icon = "◈", label = "Language",        value = "Luau" },
+    { icon = "▣", label = "Platform",        value = "Roblox" },
+    { icon = "▤", label = "Executor",        value = "Delta" },
+    { icon = "◐", label = "UI Theme",        value = "Purple" },
+    { icon = "▬", label = "Device Support",  value = "Mobile" },
+    { icon = "●", label = "Status",          value = "Active" },
+    { icon = "◷", label = "Last Update",     value = "—" },
+}
+
+local scriptCardHeight = 34 + (#SCRIPT_INFO * 22) + 10
+local scriptCard = create("Frame", {
+    Name = "ScriptCard",
+    Size = UDim2.new(1, 0, 0, scriptCardHeight),
+    BackgroundColor3 = THEME.BG_CARD,
+    BackgroundTransparency = 0.05,
+    BorderSizePixel = 0,
+    LayoutOrder = 4,
+    ZIndex = 4,
+}, homePage)
+addCorner(12, scriptCard)
+addStroke(THEME.BORDER, 1, 0.15, scriptCard)
+
+create("TextLabel", {
+    Size = UDim2.new(1, -20, 0, 22),
+    Position = UDim2.new(0, 12, 0, 8),
+    BackgroundTransparency = 1,
+    Text = "✦  SCRIPT INFORMATION",
+    Font = FONT.Bold, TextSize = 12,
+    TextColor3 = THEME.P_GLOW,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    ZIndex = 5,
+}, scriptCard)
+
+local function makeInfoRow(parent, order, iconText, labelText, valueText)
+    local row = create("Frame", {
+        Size = UDim2.new(1, -20, 0, 20),
+        Position = UDim2.new(0, 10, 0, 34 + order * 22),
+        BackgroundTransparency = 1,
+        ZIndex = 5,
+    }, parent)
+
+    create("TextLabel", {
+        Size = UDim2.fromOffset(14, 20),
+        BackgroundTransparency = 1,
+        Text = iconText,
+        Font = FONT.Bold, TextSize = 10,
+        TextColor3 = THEME.P_GLOW,
+        ZIndex = 6,
+    }, row)
+
+    create("TextLabel", {
+        Size = UDim2.new(0, 105, 1, 0),
+        Position = UDim2.new(0, 18, 0, 0),
+        BackgroundTransparency = 1,
+        Text = labelText,
+        Font = FONT.Medium, TextSize = 10,
+        TextColor3 = THEME.TX_SUBTLE,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 6,
+    }, row)
+
+    create("TextLabel", {
+        Size = UDim2.new(1, -128, 1, 0),
+        Position = UDim2.new(0, 123, 0, 0),
+        BackgroundTransparency = 1,
+        Text = valueText,
+        Font = FONT.Bold, TextSize = 10,
+        TextColor3 = THEME.TX_MAIN,
+        TextXAlignment = Enum.TextXAlignment.Right,
+        TextTruncate = Enum.TextTruncate.AtEnd,
+        ZIndex = 6,
+    }, row)
+end
+
+for i, info in ipairs(SCRIPT_INFO) do
+    makeInfoRow(scriptCard, i - 1, info.icon, info.label, info.value)
+end
+
+-- ── Join Our Discord ────────────────────────────────────────
+local DISCORD_URL = "https://discord.gg/xzNRnKyVd"
+
+local discordBtn = create("TextButton", {
+    Name = "DiscordBtn",
+    Size = UDim2.new(1, 0, 0, 52),
+    BackgroundColor3 = THEME.P_MAIN,
+    AutoButtonColor = false,
+    Text = "",
+    LayoutOrder = 5,
+    ZIndex = 4,
+}, homePage)
+addCorner(12, discordBtn)
+local discordStroke = addStroke(THEME.P_GLOW, 2, 0.35, discordBtn)
+addGradient(discordBtn, {
+    ColorSequenceKeypoint.new(0,   THEME.P_MAIN),
+    ColorSequenceKeypoint.new(0.5, THEME.P_BRIGHT),
+    ColorSequenceKeypoint.new(1,   THEME.P_MAIN),
+}, 90)
+
+create("TextLabel", {
+    Size = UDim2.fromScale(1, 1),
+    BackgroundTransparency = 1,
+    Text = "◈   JOIN OUR DISCORD",
+    Font = FONT.Bold, TextSize = 15,
+    TextColor3 = THEME.TX_MAIN,
+    TextStrokeColor3 = Color3.fromRGB(40, 20, 80),
+    TextStrokeTransparency = 0.7,
+    ZIndex = 5,
+}, discordBtn)
+
+-- نقرة: فتح الرابط
+discordBtn.MouseButton1Click:Connect(function()
+    openURL(DISCORD_URL)
+end)
+
+-- تحويم على الكمبيوتر
+if UserInputService.MouseEnabled then
+    discordBtn.MouseEnter:Connect(function()
+        tween(discordStroke, TweenInfo.new(0.18), { Transparency = 0.1 })
+    end)
+    discordBtn.MouseLeave:Connect(function()
+        tween(discordStroke, TweenInfo.new(0.18), { Transparency = 0.35 })
+    end)
+end
+
+-- ================== نهاية صفحة Home =========================
+
 --==================================================================
 -- 13) صفحة News
 --==================================================================
@@ -567,26 +903,11 @@ addGradient(newsHeader, {
 }, 0)
 
 local NEWS_DATA = {
-    {
-        title = "LYNEX HUB Launch",
-        body  = "The first public release of LYNEX HUB is live. Enjoy the brand-new premium interface optimized for mobile.",
-        date  = "2025-01-15",
-    },
-    {
-        title = "Mobile Optimization",
-        body  = "Touch-friendly controls, responsive layout, and smooth animations tuned for phones of all sizes.",
-        date  = "2025-01-20",
-    },
-    {
-        title = "Player Profile Card",
-        body  = "Home tab now displays your real Roblox avatar, display name, user id and account age.",
-        date  = "2025-01-24",
-    },
-    {
-        title = "Settings & Customization",
-        body  = "You can now toggle animations, adjust window transparency, and enable or disable the purple glow.",
-        date  = "2025-01-26",
-    },
+    { title = "LYNEX HUB Launch",      body = "The first public release of LYNEX HUB is live. Enjoy the brand-new premium interface optimized for mobile.", date = "2025-01-15" },
+    { title = "Mobile Optimization",   body = "Touch-friendly controls, responsive layout, and smooth animations tuned for phones of all sizes.",          date = "2025-01-20" },
+    { title = "Player Profile Card",   body = "Home tab now displays your real Roblox avatar, display name, user id and account age.",                 date = "2025-01-24" },
+    { title = "Settings & Customization", body = "You can now toggle animations, adjust window transparency, and enable or disable the purple glow.", date = "2025-01-26" },
+    { title = "Developer & Script Info", body = "Home now shows Developer Info, Script Information, and a quick link to our Discord community.",      date = "2025-01-28" },
 }
 
 local newsCards = {}
@@ -1029,7 +1350,7 @@ local function attachPressEffect(btn)
     end)
 end
 
-for _, btn in ipairs({ menuBtn, closeBtn, floatingBtn, resetBtn }) do
+for _, btn in ipairs({ menuBtn, closeBtn, floatingBtn, resetBtn, discordBtn }) do
     attachPressEffect(btn)
 end
 for _, data in pairs(tabButtons) do
@@ -1084,11 +1405,9 @@ UserInputService.InputChanged:Connect(function(input)
 end)
 
 --==================================================================
--- 20) فتح/طي القائمة الجانبية — تبدأ مفتوحة دائماً
+-- 20) فتح/طي القائمة الجانبية — تبدأ مفتوحة
 --==================================================================
 local sidebarOpen = true
-
--- تأكيد الحالة الفعلية للواجهة (مفتوحة) منذ لحظة الإنشاء
 sidebar.Size     = UDim2.new(0, sidebarW, 1, 0)
 content.Position = UDim2.new(0, sidebarW, 0, 0)
 content.Size     = UDim2.new(1, -sidebarW, 1, 0)
@@ -1121,6 +1440,9 @@ local function animatePageIn(page, id)
     if pageTweens[id] then
         pageTweens[id]:Cancel()
         pageTweens[id] = nil
+    end
+    if page:IsA("ScrollingFrame") then
+        page.CanvasPosition = Vector2.new(0, 0)
     end
     if not settings.animations then
         page.Position = pageOrigPos[id]
@@ -1215,54 +1537,7 @@ closeBtn.MouseButton1Click:Connect(hideWindow)
 floatingBtn.MouseButton1Click:Connect(showWindow)
 
 --==================================================================
--- 23) Toast
---==================================================================
-local function showToast(message)
-    local toast = create("Frame", {
-        Name = "Toast",
-        Size = UDim2.fromOffset(230, 40),
-        Position = UDim2.new(0.5, -115, 0, -58),
-        BackgroundColor3 = THEME.BG_CARD,
-        BackgroundTransparency = 1,
-        BorderSizePixel = 0,
-        ZIndex = 100,
-    }, screenGui)
-    addCorner(12, toast)
-    local toastStroke = addStroke(THEME.P_BRIGHT, 1, 1, toast)
-    local label = create("TextLabel", {
-        Size = UDim2.fromScale(1, 1),
-        BackgroundTransparency = 1,
-        Text = message,
-        Font = FONT.Bold, TextSize = 12,
-        TextColor3 = THEME.TX_MAIN,
-        TextTransparency = 1,
-        TextXAlignment = Enum.TextXAlignment.Center,
-        ZIndex = 101,
-    }, toast)
-
-    tween(toast, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-        Position = UDim2.new(0.5, -115, 0, 20),
-        BackgroundTransparency = 0.02,
-    })
-    tween(toastStroke, TweenInfo.new(0.3), { Transparency = 0.4 })
-    tween(label, TweenInfo.new(0.3), { TextTransparency = 0 })
-
-    task.delay(2.4, function()
-        if not toast or not toast.Parent then return end
-        tween(toast, TweenInfo.new(0.3), {
-            Position = UDim2.new(0.5, -115, 0, -58),
-            BackgroundTransparency = 1,
-        })
-        tween(toastStroke, TweenInfo.new(0.3), { Transparency = 1 })
-        tween(label, TweenInfo.new(0.3), { TextTransparency = 1 })
-        task.delay(0.35, function()
-            if toast then toast:Destroy() end
-        end)
-    end)
-end
-
---==================================================================
--- 24) تحميل بيانات اللاعب الحقيقية
+-- 23) تحميل بيانات اللاعب الحقيقية
 --==================================================================
 local function loadPlayerProfile()
     pcall(function()
@@ -1291,7 +1566,7 @@ end
 loadPlayerProfile()
 
 --==================================================================
--- 25) منطق الإعدادات
+-- 24) منطق الإعدادات
 --==================================================================
 function applyWindowTransparency(pct)
     settings.transparency = math.clamp(pct, 0, 90)
@@ -1337,7 +1612,7 @@ resetBtn.MouseButton1Click:Connect(function()
 end)
 
 --==================================================================
--- 26) استجابة تغيّر حجم الشاشة
+-- 25) استجابة تغيّر حجم الشاشة
 --==================================================================
 local function onViewportChange()
     local w, h = computeWindowSize()
@@ -1364,7 +1639,7 @@ workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
 end)
 
 --==================================================================
--- 27) تشغيل تلقائي على Home + أنيميشن الدخول
+-- 26) تشغيل تلقائي على Home + أنيميشن الدخول
 --==================================================================
 switchTab("home")
 
@@ -1391,4 +1666,4 @@ do
     end
 end
 
-print("[LYNEX HUB v2.2] ✦ Ready — Sidebar OPEN · Home active")
+print("[LYNEX HUB v2.3] ✦ Ready — Home (scrollable) · News · Settings")
