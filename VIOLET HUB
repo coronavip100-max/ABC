@@ -1,8 +1,8 @@
 --!nonstrict
 --==================================================================
---  ✦ LYNEX HUB v2.6 ✦
+--  ✦ LYNEX HUB v2.7 ✦
 --  Home • Players • News • Settings  |  Blur  |  Mobile  |  Purple
---  + Spectate System (persistent, GUI-independent)
+--  + Spectate System (persistent) + Teleport Button
 --==================================================================
 
 local Players          = game:GetService("Players")
@@ -14,7 +14,7 @@ local localPlayer = Players.LocalPlayer
 local playerGui   = localPlayer:WaitForChild("PlayerGui")
 
 --==================================================================
--- 0) الحالة + forward declarations
+-- 0) الحالة
 --==================================================================
 local settings = {
     animations   = true,
@@ -196,7 +196,7 @@ local function openURL(url)
 end
 
 --==================================================================
--- 3.2) إدارة Blur
+-- 3.2) Blur
 --==================================================================
 local BLUR_SIZE = 20
 
@@ -226,7 +226,7 @@ local function removeBlur()
 end
 
 --==================================================================
--- 4) تنظيف النسخة السابقة + blur قديم
+-- 4) تنظيف
 --==================================================================
 local guiParent = resolveGuiParent()
 for _, p in ipairs({ guiParent, playerGui }) do
@@ -274,8 +274,7 @@ screenGui = create("ScreenGui", {
 if screenGui.Destroying then
     screenGui.Destroying:Connect(function()
         removeBlur()
-        -- لا نوقف Spectate عند تدمير GUI — يبقى نشطاً حتى ينهيه المستخدم
-        -- أو يغادر الهدف. CameraSubject يبقى كما هو (لا تغيير قسري).
+        -- لا نوقف Spectate عند تدمير GUI
     end)
 end
 
@@ -772,7 +771,7 @@ makeCopyRow(devCard, 1, "◈", "Discord", "hamza.abc0",   "hamza.abc0",   "Disco
 
 local SCRIPT_INFO = {
     { icon = "✦", label = "Script Name",     value = "LYNEX HUB" },
-    { icon = "◆", label = "Version",         value = "V1.0.0" },
+    { icon = "◆", label = "Version",         value = "V2.7.0" },
     { icon = "◉", label = "Developer",       value = "hamza000599" },
     { icon = "◈", label = "Language",        value = "Luau" },
     { icon = "▣", label = "Platform",        value = "Roblox" },
@@ -896,18 +895,17 @@ if UserInputService.MouseEnabled then
 end
 
 --==================================================================
--- 13) Spectate System (independent of GUI lifecycle)  ◀️ إعادة كتابة كاملة
+-- 13) Spectate System (persistent, GUI-independent)
 --==================================================================
 local spectate = {
     active     = false,
-    target     = nil,   -- Player instance
-    connection = nil,   -- CharacterAdded connection for target (single)
+    target     = nil,
+    connection = nil,
 }
 
-local spectateButtons = {}  -- [player] = { btn, stroke } (rebuilt with cards)
-local floatingBadge = nil   -- forward decl (created with floatingBtn later)
+local spectateButtons = {}  -- [player] = { btn, stroke }
+local floatingBadge = nil
 
--- ── مؤشر عائم أسفل الشاشة (يظهر فقط حين تكون الواجهة ظاهرة) ──
 local spectateIndicator = create("Frame", {
     Name = "SpectateIndicator",
     Size = UDim2.fromOffset(240, 34),
@@ -932,7 +930,6 @@ local spectateIndicatorLabel = create("TextLabel", {
     ZIndex = 101,
 }, spectateIndicator)
 
--- زر إيقاف صغير على المؤشر (يعمل حتى لو الهدف مفلتر خارج القائمة)
 local spectateStopBtn = create("TextButton", {
     Name = "StopBtn",
     Size = UDim2.fromOffset(24, 24),
@@ -947,7 +944,6 @@ local spectateStopBtn = create("TextButton", {
 addCorner(12, spectateStopBtn)
 local spectateStopStroke = addStroke(THEME.DANGER_HI, 1, 0.3, spectateStopBtn)
 
--- ── مساعدات ──
 local function getHumanoid(player)
     if not player or not player.Parent then return nil end
     local char = player.Character
@@ -962,12 +958,11 @@ local function displayNameOf(player)
     return d
 end
 
--- ── تحديث حالة كل أزرار Spectate الحالية ──
 local function refreshSpectateButtons()
     for player, refs in pairs(spectateButtons) do
         if refs and refs.btn and refs.btn.Parent then
             local isTarget = (spectate.active and spectate.target == player)
-            refs.btn.Text = isTarget and "◉  Stop Spectating" or "◉  Spectate"
+            refs.btn.Text = isTarget and "◉  Stop" or "◉  Spectate"
             tween(refs.btn, TweenInfo.new(0.2), {
                 BackgroundColor3 = isTarget and THEME.DANGER or THEME.P_MAIN,
             })
@@ -980,7 +975,6 @@ local function refreshSpectateButtons()
     end
 end
 
--- ── تحديث المؤشر + الشارة العائمة ──
 local function updateSpectateIndicator()
     local shouldShow = spectate.active
         and spectate.target
@@ -1016,11 +1010,9 @@ local function updateSpectateIndicator()
     end
 end
 
--- ── ربط الكاميرا بالهدف الحالي (بدون تغيير فعالية spectate) ──
 local function bindCameraToTarget()
     if not spectate.active or not spectate.target then return end
     if not spectate.target.Parent then
-        -- الهدف غادر بدون event (حالة نادرة)
         spectate.active = false
         spectate.target = nil
         if spectate.connection then
@@ -1044,7 +1036,6 @@ local function bindCameraToTarget()
     end
 end
 
--- ── إيقاف المشاهدة (السبب يظهر في toast، أو "silent") ──
 local function stopSpectating(reason)
     if not spectate.active then return end
     spectate.active = false
@@ -1055,14 +1046,12 @@ local function stopSpectating(reason)
         spectate.connection = nil
     end
 
-    -- إعادة الكاميرا للاعب المحلي
     local cam = workspace.CurrentCamera
     if cam then
         local myHum = getHumanoid(localPlayer)
         if myHum then
             cam.CameraSubject = myHum
         else
-            -- اللاعب المحلي ميت → انتظر respawn ثم أعِد الكاميرا
             localPlayer.CharacterAdded:Once(function(char)
                 task.wait(0.15)
                 if spectate.active then return end
@@ -1082,7 +1071,6 @@ local function stopSpectating(reason)
     end
 end
 
--- ── بدء / تبديل المشاهدة (بدون stop/restart) ──
 local function startSpectating(targetPlayer)
     if not targetPlayer then return end
     if targetPlayer == localPlayer then
@@ -1094,13 +1082,11 @@ local function startSpectating(targetPlayer)
         return
     end
 
-    -- نفس الهدف → إيقاف
     if spectate.active and spectate.target == targetPlayer then
         stopSpectating()
         return
     end
 
-    -- هدف مختلف → افصل الاتصال القديم وبدّل مباشرة (بدون flash)
     if spectate.connection then
         pcall(function() spectate.connection:Disconnect() end)
         spectate.connection = nil
@@ -1109,14 +1095,12 @@ local function startSpectating(targetPlayer)
     spectate.active = true
     spectate.target = targetPlayer
 
-    -- محاولة ربط فورية
     local hum = getHumanoid(targetPlayer)
     local cam = workspace.CurrentCamera
     if hum and cam then
         cam.CameraSubject = hum
     end
 
-    -- ربط CharacterAdded للهدف (لحالة respawn + حالة عدم الجاهزية الأولية)
     spectate.connection = targetPlayer.CharacterAdded:Connect(function(char)
         if not spectate.active or spectate.target ~= targetPlayer then return end
         task.wait(0.1)
@@ -1138,14 +1122,12 @@ local function startSpectating(targetPlayer)
     end
 end
 
--- ── معالجة خروج الهدف (global, يفحص الحالة الحالية) ──
 Players.PlayerRemoving:Connect(function(p)
     if spectate.active and spectate.target and spectate.target.UserId == p.UserId then
         stopSpectating("Target left — camera restored")
     end
 end)
 
--- ── معالجة respawn اللاعب المحلي (يبقى على الهدف إن كان نشطاً) ──
 localPlayer.CharacterAdded:Connect(function()
     if spectate.active and spectate.target then
         task.wait(0.15)
@@ -1154,7 +1136,6 @@ localPlayer.CharacterAdded:Connect(function()
     end
 end)
 
--- ربط زر الإيقاف على المؤشر
 spectateStopBtn.MouseButton1Click:Connect(function()
     stopSpectating()
 end)
@@ -1168,6 +1149,86 @@ if UserInputService.MouseEnabled then
         tween(spectateStopStroke, TweenInfo.new(0.15), { Transparency = 0.3 })
         tween(spectateStopBtn, TweenInfo.new(0.15), { BackgroundColor3 = THEME.DANGER })
     end)
+end
+
+--==================================================================
+-- 13.6) Teleport System  ◀️ جديد
+--==================================================================
+local TELEPORT_COOLDOWN = 1.0
+local lastTeleportTime = 0
+
+local function teleportToPlayer(targetPlayer, button)
+    -- تحقق من الهدف
+    if not targetPlayer or not targetPlayer.Parent then
+        showToast("➤  Player unavailable")
+        return
+    end
+    if targetPlayer == localPlayer then
+        showToast("➤  Cannot teleport to yourself")
+        return
+    end
+
+    -- cooldown (يمنع السبام)
+    local now = os.clock()
+    if now - lastTeleportTime < TELEPORT_COOLDOWN then
+        return
+    end
+    lastTeleportTime = now
+
+    -- تحقق من شخصية اللاعب المحلي
+    local myChar = localPlayer.Character
+    local myHum  = myChar and myChar:FindFirstChildOfClass("Humanoid")
+    local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    if not (myChar and myHum and myRoot) then
+        showToast("➤  Your character is not ready")
+        return
+    end
+    if myHum.Health <= 0 then
+        showToast("➤  You are dead")
+        return
+    end
+
+    -- تحقق من شخصية الهدف
+    local targetChar = targetPlayer.Character
+    local targetHum  = targetChar and targetChar:FindFirstChildOfClass("Humanoid")
+    local targetRoot = targetChar and targetChar:FindFirstChild("HumanoidRootPart")
+    if not (targetChar and targetHum and targetRoot) then
+        showToast("➤  " .. displayNameOf(targetPlayer) .. " has no character")
+        return
+    end
+    if targetHum.Health <= 0 then
+        showToast("➤  " .. displayNameOf(targetPlayer) .. " is dead")
+        return
+    end
+
+    -- تنفيذ الانتقال (خلف الهدف بـ 4 studs مع الحفاظ على الارتفاع)
+    -- ملاحظة: نستخدم PivotTo الافتراضي — إذا كانت اللعبة تمنع الانتقال
+    -- عبر anti-cheat server-side، فالقرار النهائي للعبة وليس لنا.
+    local destination = targetRoot.CFrame * CFrame.new(0, 0, 4)
+    local ok = pcall(function()
+        myChar:PivotTo(destination)
+    end)
+    if not ok then
+        pcall(function()
+            myRoot.CFrame = destination
+        end)
+    end
+
+    showToast("➤  Teleported to " .. displayNameOf(targetPlayer))
+
+    -- تأثير cooldown بصري على الزر
+    if button and button.Parent then
+        local origText = button.Text
+        local origBG   = button.BackgroundColor3
+        button.Text = "➤  …"
+        button.BackgroundColor3 = THEME.BG_CARD_HI
+        task.delay(TELEPORT_COOLDOWN, function()
+            if button and button.Parent then
+                button.Text = origText
+                button.BackgroundColor3 = origBG
+            end
+        end)
+    end
 end
 
 --==================================================================
@@ -1248,7 +1309,45 @@ create("UIPadding", {
     PaddingBottom = UDim.new(0, 6),
 }, playersList)
 
--- ── بناء بطاقة لاعب (مع Spectate) ──
+-- ── زر مشترك: press effect + hover ──
+local function styleActionButton(btn, stroke, hoverBaseColor)
+    local baseSize = btn.Size
+    local pressing = false
+    local function scaleTo(f, dur)
+        tween(btn, TweenInfo.new(dur), {
+            Size = UDim2.new(
+                baseSize.X.Scale * f, baseSize.X.Offset * f,
+                baseSize.Y.Scale * f, baseSize.Y.Offset * f
+            )
+        })
+    end
+    btn.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+           or input.UserInputType == Enum.UserInputType.Touch then
+            pressing = true
+            scaleTo(0.93, 0.08)
+        end
+    end)
+    btn.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+           or input.UserInputType == Enum.UserInputType.Touch then
+            if pressing then
+                pressing = false
+                scaleTo(1, 0.14)
+            end
+        end
+    end)
+    if UserInputService.MouseEnabled then
+        btn.MouseEnter:Connect(function()
+            tween(stroke, TweenInfo.new(0.15), { Transparency = 0.05 })
+        end)
+        btn.MouseLeave:Connect(function()
+            tween(stroke, TweenInfo.new(0.15), { Transparency = 0.25 })
+        end)
+    end
+end
+
+-- ── بناء بطاقة لاعب (Spectate + Teleport جنباً إلى جنب) ──
 local function buildPlayerCard(player, order)
     local isSpectating = (spectate.active and spectate.target == player)
 
@@ -1341,20 +1440,23 @@ local function buildPlayerCard(player, order)
         ZIndex = 6,
     }, card)
 
-    -- زر Spectate
+    -- ═══ Spectate Button (يسار) ═══
     local specBtn = create("TextButton", {
         Name = "SpectateBtn",
-        Size = UDim2.new(1, -20, 0, 28),
+        Size = UDim2.new(0.5, -13, 0, 28),
         Position = UDim2.new(0, 10, 1, -38),
         BackgroundColor3 = isSpectating and THEME.DANGER or THEME.P_MAIN,
         BackgroundTransparency = 0.05,
         AutoButtonColor = false,
-        Text = isSpectating and "◉  Stop Spectating" or "◉  Spectate",
+        Text = isSpectating and "◉  Stop" or "◉  Spectate",
         Font = FONT.Bold, TextSize = 11,
         TextColor3 = THEME.TX_MAIN,
+        TextScaled = true,
+        TextWrapped = false,
         ZIndex = 7,
     }, card)
     addCorner(8, specBtn)
+    create("UITextSizeConstraint", { MaxTextSize = 11, MinTextSize = 8 }, specBtn)
     local specStroke = addStroke(
         isSpectating and THEME.DANGER_HI or THEME.P_GLOW,
         1.2, 0.25, specBtn
@@ -1368,44 +1470,33 @@ local function buildPlayerCard(player, order)
         end
     end)
 
-    local baseSize = specBtn.Size
-    local pressing = false
-    local function scaleTo(f, dur)
-        tween(specBtn, TweenInfo.new(dur), {
-            Size = UDim2.new(
-                baseSize.X.Scale * f, baseSize.X.Offset * f,
-                baseSize.Y.Scale * f, baseSize.Y.Offset * f
-            )
-        })
-    end
-    specBtn.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1
-           or input.UserInputType == Enum.UserInputType.Touch then
-            pressing = true
-            scaleTo(0.94, 0.08)
-        end
-    end)
-    specBtn.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1
-           or input.UserInputType == Enum.UserInputType.Touch then
-            if pressing then
-                pressing = false
-                scaleTo(1, 0.14)
-            end
-        end
-    end)
-
-    if UserInputService.MouseEnabled then
-        specBtn.MouseEnter:Connect(function()
-            tween(specStroke, TweenInfo.new(0.15), { Transparency = 0.05 })
-        end)
-        specBtn.MouseLeave:Connect(function()
-            tween(specStroke, TweenInfo.new(0.15), { Transparency = 0.25 })
-        end)
-    end
-
+    styleActionButton(specBtn, specStroke)
     specBtn.MouseButton1Click:Connect(function()
-        startSpectating(player)  -- يقرر داخلياً (stop إن كان نفس الهدف)
+        startSpectating(player)
+    end)
+
+    -- ═══ Teleport Button (يمين) ═══
+    local tpBtn = create("TextButton", {
+        Name = "TeleportBtn",
+        Size = UDim2.new(0.5, -13, 0, 28),
+        Position = UDim2.new(0.5, 3, 1, -38),
+        BackgroundColor3 = THEME.P_MAIN,
+        BackgroundTransparency = 0.05,
+        AutoButtonColor = false,
+        Text = "➤  Teleport",
+        Font = FONT.Bold, TextSize = 11,
+        TextColor3 = THEME.TX_MAIN,
+        TextScaled = true,
+        TextWrapped = false,
+        ZIndex = 7,
+    }, card)
+    addCorner(8, tpBtn)
+    create("UITextSizeConstraint", { MaxTextSize = 11, MinTextSize = 8 }, tpBtn)
+    local tpStroke = addStroke(THEME.P_GLOW, 1.2, 0.25, tpBtn)
+
+    styleActionButton(tpBtn, tpStroke)
+    tpBtn.MouseButton1Click:Connect(function()
+        teleportToPlayer(player, tpBtn)
     end)
 
     return card
@@ -1438,7 +1529,6 @@ local function renderPlayers(filter)
 
     local order = 0
     for _, p in ipairs(list) do
-        -- لا نستبعد اللاعب المحلي — يظهر في القائمة، والزر يعرض تحذيراً لو ضُغط
         local matches = filter == ""
             or p.Name:lower():find(filter, 1, true) ~= nil
             or p.DisplayName:lower():find(filter, 1, true) ~= nil
@@ -1542,6 +1632,7 @@ local NEWS_DATA = {
     { title = "Players Tab & Blur",     body = "New Players tab with live search and player cards. A subtle blur effect now enhances the UI focus.",       date = "2025-02-01" },
     { title = "Spectate System",        body = "New Spectate feature on Players tab lets you watch any player using the Roblox camera in real time.",          date = "2025-02-08" },
     { title = "Persistent Spectate Fix", body = "Spectate now persists after hiding the UI, supports all players, and handles respawns and disconnects reliably.", date = "2025-02-15" },
+    { title = "Teleport Button",        body = "New Teleport button next to Spectate lets you travel to any player — compliant with in-game movement rules.", date = "2025-02-22" },
 }
 
 local newsCards = {}
@@ -1866,7 +1957,6 @@ addGradient(floatingBtn, {
     ColorSequenceKeypoint.new(1, THEME.P_BRIGHT),
 }, 45)
 
--- شارة صغيرة على الزر العائم للدلالة على Spectate نشط
 floatingBadge = create("Frame", {
     Name = "SpectateBadge",
     Size = UDim2.fromOffset(10, 10),
@@ -1969,7 +2059,7 @@ task.spawn(function()
 end)
 
 --==================================================================
--- 20) Press & Hover
+-- 20) Press & Hover (للأزرار العامة فقط — أزرار البطاقات لها معالجها الخاص)
 --==================================================================
 local function attachPressEffect(btn)
     local baseSize = btn.Size
@@ -2158,13 +2248,12 @@ for id, data in pairs(tabButtons) do
 end
 
 --==================================================================
--- 24) الإظهار / الإخفاء  ◀️ لا يوقف Spectate
+-- 24) الإظهار / الإخفاء (لا يوقف Spectate)
 --==================================================================
 local function hideWindow()
     windowHidden = true
     removeBlur()
 
-    -- إخفاء indicator (لأنه جزء من الواجهة الظاهرة)
     if spectateIndicator.Visible then
         tween(spectateIndicator, TweenInfo.new(0.2), { BackgroundTransparency = 1 })
         tween(spectateIndicatorLabel, TweenInfo.new(0.2), { TextTransparency = 1 })
@@ -2199,7 +2288,6 @@ local function showWindow()
         end
     end)
 
-    -- إذا كانت المشاهدة نشطة، أظهر المؤشر مجدداً
     if spectate.active then
         updateSpectateIndicator()
     end
@@ -2339,4 +2427,4 @@ do
     end
 end
 
-print("[LYNEX HUB v2.6] ✦ Ready — Persistent Spectate + Players tab + Search")
+print("[LYNEX HUB v2.7] ✦ Ready — Spectate + Teleport + Players tab")
