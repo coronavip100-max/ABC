@@ -1,8 +1,8 @@
 --!nonstrict
 --==================================================================
---  ✦ LYNEX HUB v2.5 ✦
+--  ✦ LYNEX HUB v2.6 ✦
 --  Home • Players • News • Settings  |  Blur  |  Mobile  |  Purple
---  + Spectate System (Roblox Camera)
+--  + Spectate System (persistent, GUI-independent)
 --==================================================================
 
 local Players          = game:GetService("Players")
@@ -22,8 +22,8 @@ local settings = {
     glow         = true,
 }
 local windowHidden = false
-local screenGui    -- forward declaration
-local blurObj      -- forward declaration
+local screenGui
+local blurObj
 
 --==================================================================
 -- 1) الجذر
@@ -272,7 +272,11 @@ screenGui = create("ScreenGui", {
 }, guiParent)
 
 if screenGui.Destroying then
-    screenGui.Destroying:Connect(removeBlur)
+    screenGui.Destroying:Connect(function()
+        removeBlur()
+        -- لا نوقف Spectate عند تدمير GUI — يبقى نشطاً حتى ينهيه المستخدم
+        -- أو يغادر الهدف. CameraSubject يبقى كما هو (لا تغيير قسري).
+    end)
 end
 
 local winW, winH = computeWindowSize()
@@ -892,16 +896,18 @@ if UserInputService.MouseEnabled then
 end
 
 --==================================================================
--- 13.5) Spectate System  ◀️ جديد
+-- 13) Spectate System (independent of GUI lifecycle)  ◀️ إعادة كتابة كاملة
 --==================================================================
 local spectate = {
-    active      = false,
-    target      = nil,
-    connections = {},
+    active     = false,
+    target     = nil,   -- Player instance
+    connection = nil,   -- CharacterAdded connection for target (single)
 }
-local spectateButtons = {}  -- [player] = { btn, stroke }
 
--- ── مؤشر عائم أسفل الشاشة ──
+local spectateButtons = {}  -- [player] = { btn, stroke } (rebuilt with cards)
+local floatingBadge = nil   -- forward decl (created with floatingBtn later)
+
+-- ── مؤشر عائم أسفل الشاشة (يظهر فقط حين تكون الواجهة ظاهرة) ──
 local spectateIndicator = create("Frame", {
     Name = "SpectateIndicator",
     Size = UDim2.fromOffset(240, 34),
@@ -916,59 +922,51 @@ addCorner(17, spectateIndicator)
 addStroke(THEME.P_BRIGHT, 1.5, 0.2, spectateIndicator)
 
 local spectateIndicatorLabel = create("TextLabel", {
-    Size = UDim2.fromScale(1, 1),
+    Size = UDim2.new(1, -34, 1, 0),
     BackgroundTransparency = 1,
     Text = "◉  Spectating",
     Font = FONT.Bold, TextSize = 12,
     TextColor3 = THEME.TX_MAIN,
     TextXAlignment = Enum.TextXAlignment.Center,
+    TextTruncate = Enum.TextTruncate.AtEnd,
     ZIndex = 101,
 }, spectateIndicator)
 
-local function updateSpectateIndicator()
-    if spectate.active and spectate.target and spectate.target.Parent then
-        local disp = spectate.target.DisplayName
-        if disp == "" or disp == nil then disp = spectate.target.Name end
-        spectateIndicatorLabel.Text = "◉  Spectating: " .. disp
-        if not spectateIndicator.Visible then
-            spectateIndicator.Visible = true
-            spectateIndicator.BackgroundTransparency = 1
-            spectateIndicatorLabel.TextTransparency = 1
-            tween(spectateIndicator, TweenInfo.new(0.22), { BackgroundTransparency = 0.05 })
-            tween(spectateIndicatorLabel, TweenInfo.new(0.22), { TextTransparency = 0 })
-        end
-    else
-        if spectateIndicator.Visible then
-            tween(spectateIndicator, TweenInfo.new(0.18), { BackgroundTransparency = 1 })
-            tween(spectateIndicatorLabel, TweenInfo.new(0.18), { TextTransparency = 1 })
-            task.delay(0.2, function()
-                if not spectate.active then
-                    spectateIndicator.Visible = false
-                end
-            end)
-        end
-    end
-end
+-- زر إيقاف صغير على المؤشر (يعمل حتى لو الهدف مفلتر خارج القائمة)
+local spectateStopBtn = create("TextButton", {
+    Name = "StopBtn",
+    Size = UDim2.fromOffset(24, 24),
+    Position = UDim2.new(1, -28, 0.5, -12),
+    BackgroundColor3 = THEME.DANGER,
+    AutoButtonColor = false,
+    Text = "✕",
+    Font = FONT.Bold, TextSize = 11,
+    TextColor3 = THEME.TX_MAIN,
+    ZIndex = 102,
+}, spectateIndicator)
+addCorner(12, spectateStopBtn)
+local spectateStopStroke = addStroke(THEME.DANGER_HI, 1, 0.3, spectateStopBtn)
 
-local function getCharacterHumanoid(player)
-    if not player then return nil end
+-- ── مساعدات ──
+local function getHumanoid(player)
+    if not player or not player.Parent then return nil end
     local char = player.Character
     if not char then return nil end
     return char:FindFirstChildOfClass("Humanoid")
 end
 
-local function clearSpectateConnections()
-    for _, conn in ipairs(spectate.connections) do
-        pcall(function() conn:Disconnect() end)
-    end
-    spectate.connections = {}
+local function displayNameOf(player)
+    if not player then return "?" end
+    local d = player.DisplayName
+    if d == nil or d == "" then return player.Name end
+    return d
 end
 
+-- ── تحديث حالة كل أزرار Spectate الحالية ──
 local function refreshSpectateButtons()
-    local target = spectate.active and spectate.target or nil
     for player, refs in pairs(spectateButtons) do
-        if refs.btn and refs.btn.Parent then
-            local isTarget = (player == target)
+        if refs and refs.btn and refs.btn.Parent then
+            local isTarget = (spectate.active and spectate.target == player)
             refs.btn.Text = isTarget and "◉  Stop Spectating" or "◉  Spectate"
             tween(refs.btn, TweenInfo.new(0.2), {
                 BackgroundColor3 = isTarget and THEME.DANGER or THEME.P_MAIN,
@@ -982,19 +980,89 @@ local function refreshSpectateButtons()
     end
 end
 
-local function stopSpectating(silent)
+-- ── تحديث المؤشر + الشارة العائمة ──
+local function updateSpectateIndicator()
+    local shouldShow = spectate.active
+        and spectate.target
+        and spectate.target.Parent
+        and not windowHidden
+
+    if shouldShow then
+        spectateIndicatorLabel.Text = "◉  Spectating: " .. displayNameOf(spectate.target)
+        if not spectateIndicator.Visible then
+            spectateIndicator.Visible = true
+            spectateIndicator.BackgroundTransparency = 1
+            spectateIndicatorLabel.TextTransparency = 1
+            spectateStopBtn.BackgroundTransparency = 1
+            tween(spectateIndicator, TweenInfo.new(0.22), { BackgroundTransparency = 0.05 })
+            tween(spectateIndicatorLabel, TweenInfo.new(0.22), { TextTransparency = 0 })
+            tween(spectateStopBtn, TweenInfo.new(0.22), { BackgroundTransparency = 0 })
+        end
+    else
+        if spectateIndicator.Visible then
+            tween(spectateIndicator, TweenInfo.new(0.18), { BackgroundTransparency = 1 })
+            tween(spectateIndicatorLabel, TweenInfo.new(0.18), { TextTransparency = 1 })
+            tween(spectateStopBtn, TweenInfo.new(0.18), { BackgroundTransparency = 1 })
+            task.delay(0.22, function()
+                if not spectate.active or windowHidden then
+                    spectateIndicator.Visible = false
+                end
+            end)
+        end
+    end
+
+    if floatingBadge then
+        floatingBadge.Visible = spectate.active
+    end
+end
+
+-- ── ربط الكاميرا بالهدف الحالي (بدون تغيير فعالية spectate) ──
+local function bindCameraToTarget()
+    if not spectate.active or not spectate.target then return end
+    if not spectate.target.Parent then
+        -- الهدف غادر بدون event (حالة نادرة)
+        spectate.active = false
+        spectate.target = nil
+        if spectate.connection then
+            pcall(function() spectate.connection:Disconnect() end)
+            spectate.connection = nil
+        end
+        local cam = workspace.CurrentCamera
+        if cam then
+            local myHum = getHumanoid(localPlayer)
+            if myHum then cam.CameraSubject = myHum end
+        end
+        updateSpectateIndicator()
+        refreshSpectateButtons()
+        return
+    end
+    local cam = workspace.CurrentCamera
+    if not cam then return end
+    local hum = getHumanoid(spectate.target)
+    if hum then
+        cam.CameraSubject = hum
+    end
+end
+
+-- ── إيقاف المشاهدة (السبب يظهر في toast، أو "silent") ──
+local function stopSpectating(reason)
     if not spectate.active then return end
     spectate.active = false
     spectate.target = nil
 
-    clearSpectateConnections()
+    if spectate.connection then
+        pcall(function() spectate.connection:Disconnect() end)
+        spectate.connection = nil
+    end
 
-    local camera = workspace.CurrentCamera
-    if camera then
-        local hum = getCharacterHumanoid(localPlayer)
-        if hum then
-            camera.CameraSubject = hum
+    -- إعادة الكاميرا للاعب المحلي
+    local cam = workspace.CurrentCamera
+    if cam then
+        local myHum = getHumanoid(localPlayer)
+        if myHum then
+            cam.CameraSubject = myHum
         else
+            -- اللاعب المحلي ميت → انتظر respawn ثم أعِد الكاميرا
             localPlayer.CharacterAdded:Once(function(char)
                 task.wait(0.15)
                 if spectate.active then return end
@@ -1009,80 +1077,101 @@ local function stopSpectating(silent)
     updateSpectateIndicator()
     refreshSpectateButtons()
 
-    if not silent then
-        showToast("◉  Spectate stopped")
+    if reason and reason ~= "silent" then
+        showToast("◉  " .. reason)
     end
 end
 
+-- ── بدء / تبديل المشاهدة (بدون stop/restart) ──
 local function startSpectating(targetPlayer)
-    if not targetPlayer or not targetPlayer.Parent then
-        showToast("◉  Player unavailable")
-        return
-    end
+    if not targetPlayer then return end
     if targetPlayer == localPlayer then
         showToast("◉  Cannot spectate yourself")
         return
     end
+    if not targetPlayer.Parent then
+        showToast("◉  Player unavailable")
+        return
+    end
 
+    -- نفس الهدف → إيقاف
     if spectate.active and spectate.target == targetPlayer then
         stopSpectating()
         return
     end
 
-    if spectate.active then
-        stopSpectating(true)
-    end
-
-    local targetHum = getCharacterHumanoid(targetPlayer)
-    if not targetHum or targetHum.Health <= 0 then
-        showToast("◉  Target has no active character")
-        return
-    end
-
-    local camera = workspace.CurrentCamera
-    if not camera then
-        showToast("◉  Camera unavailable")
-        return
+    -- هدف مختلف → افصل الاتصال القديم وبدّل مباشرة (بدون flash)
+    if spectate.connection then
+        pcall(function() spectate.connection:Disconnect() end)
+        spectate.connection = nil
     end
 
     spectate.active = true
     spectate.target = targetPlayer
-    camera.CameraSubject = targetHum
 
-    table.insert(spectate.connections, targetPlayer.CharacterAdded:Connect(function()
-        task.wait(0.15)
+    -- محاولة ربط فورية
+    local hum = getHumanoid(targetPlayer)
+    local cam = workspace.CurrentCamera
+    if hum and cam then
+        cam.CameraSubject = hum
+    end
+
+    -- ربط CharacterAdded للهدف (لحالة respawn + حالة عدم الجاهزية الأولية)
+    spectate.connection = targetPlayer.CharacterAdded:Connect(function(char)
         if not spectate.active or spectate.target ~= targetPlayer then return end
-        local hum = getCharacterHumanoid(targetPlayer)
-        if hum and workspace.CurrentCamera then
-            workspace.CurrentCamera.CameraSubject = hum
+        task.wait(0.1)
+        if not spectate.active or spectate.target ~= targetPlayer then return end
+        local newHum = char:FindFirstChildOfClass("Humanoid")
+        if newHum and workspace.CurrentCamera then
+            workspace.CurrentCamera.CameraSubject = newHum
         end
-    end))
-
-    table.insert(spectate.connections, Players.PlayerRemoving:Connect(function(p)
-        if spectate.active and spectate.target == p then
-            stopSpectating()
-        end
-    end))
-
-    table.insert(spectate.connections, localPlayer.CharacterAdded:Connect(function()
-        task.wait(0.15)
-        if not spectate.active or not spectate.target then return end
-        local hum = getCharacterHumanoid(spectate.target)
-        if hum and workspace.CurrentCamera then
-            workspace.CurrentCamera.CameraSubject = hum
-        end
-    end))
+    end)
 
     updateSpectateIndicator()
     refreshSpectateButtons()
 
-    local disp = targetPlayer.DisplayName
-    if disp == "" or disp == nil then disp = targetPlayer.Name end
-    showToast("◉  Spectating " .. disp)
+    local disp = displayNameOf(targetPlayer)
+    if hum then
+        showToast("◉  Spectating " .. disp)
+    else
+        showToast("◉  Waiting for " .. disp .. "…")
+    end
+end
+
+-- ── معالجة خروج الهدف (global, يفحص الحالة الحالية) ──
+Players.PlayerRemoving:Connect(function(p)
+    if spectate.active and spectate.target and spectate.target.UserId == p.UserId then
+        stopSpectating("Target left — camera restored")
+    end
+end)
+
+-- ── معالجة respawn اللاعب المحلي (يبقى على الهدف إن كان نشطاً) ──
+localPlayer.CharacterAdded:Connect(function()
+    if spectate.active and spectate.target then
+        task.wait(0.15)
+        if not spectate.active then return end
+        bindCameraToTarget()
+    end
+end)
+
+-- ربط زر الإيقاف على المؤشر
+spectateStopBtn.MouseButton1Click:Connect(function()
+    stopSpectating()
+end)
+
+if UserInputService.MouseEnabled then
+    spectateStopBtn.MouseEnter:Connect(function()
+        tween(spectateStopStroke, TweenInfo.new(0.15), { Transparency = 0 })
+        tween(spectateStopBtn, TweenInfo.new(0.15), { BackgroundColor3 = THEME.DANGER_HI })
+    end)
+    spectateStopBtn.MouseLeave:Connect(function()
+        tween(spectateStopStroke, TweenInfo.new(0.15), { Transparency = 0.3 })
+        tween(spectateStopBtn, TweenInfo.new(0.15), { BackgroundColor3 = THEME.DANGER })
+    end)
 end
 
 --==================================================================
--- 13) صفحة Players  ◀️ مع Spectate
+-- 14) صفحة Players
 --==================================================================
 local playersPage = createPage("players")
 
@@ -1159,7 +1248,7 @@ create("UIPadding", {
     PaddingBottom = UDim.new(0, 6),
 }, playersList)
 
--- بناء بطاقة لاعب (مع Spectate)
+-- ── بناء بطاقة لاعب (مع Spectate) ──
 local function buildPlayerCard(player, order)
     local isSpectating = (spectate.active and spectate.target == player)
 
@@ -1206,7 +1295,7 @@ local function buildPlayerCard(player, order)
         Size = UDim2.new(1, -iX - 8, 0, 18),
         Position = UDim2.new(0, iX, 0, 10),
         BackgroundTransparency = 1,
-        Text = (player.DisplayName ~= "" and player.DisplayName) or player.Name,
+        Text = displayNameOf(player),
         Font = FONT.Bold, TextSize = 13,
         TextColor3 = THEME.TX_MAIN,
         TextXAlignment = Enum.TextXAlignment.Left,
@@ -1316,17 +1405,23 @@ local function buildPlayerCard(player, order)
     end
 
     specBtn.MouseButton1Click:Connect(function()
-        if spectate.active and spectate.target == player then
-            stopSpectating()
-        else
-            startSpectating(player)
-        end
+        startSpectating(player)  -- يقرر داخلياً (stop إن كان نفس الهدف)
     end)
 
     return card
 end
 
+-- ── إعادة بناء القائمة (محمي ضد التراكب) ──
+local renderBusy = false
+local renderPending = false
+
 local function renderPlayers(filter)
+    if renderBusy then
+        renderPending = true
+        return
+    end
+    renderBusy = true
+
     for _, child in ipairs(playersList:GetChildren()) do
         if child:IsA("Frame") or child:IsA("TextLabel") then
             child:Destroy()
@@ -1343,6 +1438,7 @@ local function renderPlayers(filter)
 
     local order = 0
     for _, p in ipairs(list) do
+        -- لا نستبعد اللاعب المحلي — يظهر في القائمة، والزر يعرض تحذيراً لو ضُغط
         local matches = filter == ""
             or p.Name:lower():find(filter, 1, true) ~= nil
             or p.DisplayName:lower():find(filter, 1, true) ~= nil
@@ -1365,6 +1461,12 @@ local function renderPlayers(filter)
             LayoutOrder = 0,
             ZIndex = 5,
         }, playersList)
+    end
+
+    renderBusy = false
+    if renderPending then
+        renderPending = false
+        renderPlayers(filter)
     end
 end
 
@@ -1397,7 +1499,7 @@ Players.PlayerRemoving:Connect(function()
 end)
 
 --==================================================================
--- 14) صفحة News
+-- 15) صفحة News
 --==================================================================
 local newsPage = createPage("news")
 
@@ -1439,6 +1541,7 @@ local NEWS_DATA = {
     { title = "Settings & Customization", body = "You can now toggle animations, adjust window transparency, and enable or disable the purple glow.", date = "2025-01-26" },
     { title = "Players Tab & Blur",     body = "New Players tab with live search and player cards. A subtle blur effect now enhances the UI focus.",       date = "2025-02-01" },
     { title = "Spectate System",        body = "New Spectate feature on Players tab lets you watch any player using the Roblox camera in real time.",          date = "2025-02-08" },
+    { title = "Persistent Spectate Fix", body = "Spectate now persists after hiding the UI, supports all players, and handles respawns and disconnects reliably.", date = "2025-02-15" },
 }
 
 local newsCards = {}
@@ -1504,7 +1607,7 @@ for i, item in ipairs(NEWS_DATA) do
 end
 
 --==================================================================
--- 15) صفحة Settings
+-- 16) صفحة Settings
 --==================================================================
 local settingsPage = createPage("settings")
 
@@ -1740,7 +1843,7 @@ addCorner(10, resetBtn)
 addStroke(THEME.DANGER, 1.2, 0.15, resetBtn)
 
 --==================================================================
--- 16) الزر العائم
+-- 17) الزر العائم + شارة Spectate
 --==================================================================
 local floatingBtn = create("TextButton", {
     Name = "FloatingBtn",
@@ -1763,8 +1866,21 @@ addGradient(floatingBtn, {
     ColorSequenceKeypoint.new(1, THEME.P_BRIGHT),
 }, 45)
 
+-- شارة صغيرة على الزر العائم للدلالة على Spectate نشط
+floatingBadge = create("Frame", {
+    Name = "SpectateBadge",
+    Size = UDim2.fromOffset(10, 10),
+    Position = UDim2.new(1, -6, 0, -6),
+    BackgroundColor3 = THEME.P_GLOW,
+    BorderSizePixel = 0,
+    Visible = false,
+    ZIndex = 51,
+}, floatingBtn)
+addCorner(5, floatingBadge)
+addStroke(THEME.BG_PANEL, 1.5, 0, floatingBadge)
+
 --==================================================================
--- 17) التلاشي
+-- 18) التلاشي
 --==================================================================
 local origTransparency = {}
 local function scanTransparency(obj)
@@ -1832,7 +1948,7 @@ local function fadeTo(value, duration, style, direction, onDone)
 end
 
 --==================================================================
--- 18) نبض التوهج
+-- 19) نبض التوهج
 --==================================================================
 task.spawn(function()
     while screenGui and screenGui.Parent do
@@ -1853,7 +1969,7 @@ task.spawn(function()
 end)
 
 --==================================================================
--- 19) Press & Hover
+-- 20) Press & Hover
 --==================================================================
 local function attachPressEffect(btn)
     local baseSize = btn.Size
@@ -1884,7 +2000,7 @@ local function attachPressEffect(btn)
     end)
 end
 
-for _, btn in ipairs({ menuBtn, closeBtn, floatingBtn, resetBtn, discordBtn }) do
+for _, btn in ipairs({ menuBtn, closeBtn, floatingBtn, resetBtn, discordBtn, spectateStopBtn }) do
     attachPressEffect(btn)
 end
 for _, data in pairs(tabButtons) do
@@ -1909,7 +2025,7 @@ if UserInputService.MouseEnabled then
 end
 
 --==================================================================
--- 20) سحب النافذة
+-- 21) سحب النافذة
 --==================================================================
 local dragging, dragStart, startPos = false, nil, nil
 header.InputBegan:Connect(function(input)
@@ -1940,7 +2056,7 @@ UserInputService.InputChanged:Connect(function(input)
 end)
 
 --==================================================================
--- 21) فتح/طي القائمة الجانبية
+-- 22) فتح/طي القائمة الجانبية
 --==================================================================
 local sidebarOpen = true
 sidebar.Size     = UDim2.new(0, sidebarW, 1, 0)
@@ -1963,7 +2079,7 @@ menuBtn.MouseButton1Click:Connect(function()
 end)
 
 --==================================================================
--- 22) نظام التبويبات
+-- 23) نظام التبويبات
 --==================================================================
 local pageTweens = {}
 local pageOrigPos = {}
@@ -2042,12 +2158,24 @@ for id, data in pairs(tabButtons) do
 end
 
 --==================================================================
--- 23) الإظهار / الإخفاء (مع Blur + إيقاف Spectate)
+-- 24) الإظهار / الإخفاء  ◀️ لا يوقف Spectate
 --==================================================================
 local function hideWindow()
-    stopSpectating(true)     -- ◀️ جديد
     windowHidden = true
     removeBlur()
+
+    -- إخفاء indicator (لأنه جزء من الواجهة الظاهرة)
+    if spectateIndicator.Visible then
+        tween(spectateIndicator, TweenInfo.new(0.2), { BackgroundTransparency = 1 })
+        tween(spectateIndicatorLabel, TweenInfo.new(0.2), { TextTransparency = 1 })
+        tween(spectateStopBtn, TweenInfo.new(0.2), { BackgroundTransparency = 1 })
+        task.delay(0.22, function()
+            if windowHidden then
+                spectateIndicator.Visible = false
+            end
+        end)
+    end
+
     tween(outerGlow, TweenInfo.new(0.25), { BackgroundTransparency = 1 })
     mainStroke.Enabled = false
     fadeTo(1, 0.28, Enum.EasingStyle.Quad, Enum.EasingDirection.In, function()
@@ -2070,13 +2198,18 @@ local function showWindow()
             tween(outerGlow, TweenInfo.new(0.3), { BackgroundTransparency = 0.85 })
         end
     end)
+
+    -- إذا كانت المشاهدة نشطة، أظهر المؤشر مجدداً
+    if spectate.active then
+        updateSpectateIndicator()
+    end
 end
 
 closeBtn.MouseButton1Click:Connect(hideWindow)
 floatingBtn.MouseButton1Click:Connect(showWindow)
 
 --==================================================================
--- 24) تحميل بيانات اللاعب
+-- 25) تحميل بيانات اللاعب
 --==================================================================
 local function loadPlayerProfile()
     pcall(function()
@@ -2105,7 +2238,7 @@ end
 loadPlayerProfile()
 
 --==================================================================
--- 25) الإعدادات
+-- 26) الإعدادات
 --==================================================================
 function applyWindowTransparency(pct)
     settings.transparency = math.clamp(pct, 0, 90)
@@ -2151,7 +2284,7 @@ resetBtn.MouseButton1Click:Connect(function()
 end)
 
 --==================================================================
--- 26) تغيّر حجم الشاشة
+-- 27) تغيّر حجم الشاشة
 --==================================================================
 local function onViewportChange()
     local w, h = computeWindowSize()
@@ -2178,7 +2311,7 @@ workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
 end)
 
 --==================================================================
--- 27) تشغيل تلقائي + Blur + أنيميشن الدخول
+-- 28) تشغيل تلقائي + Blur + أنيميشن الدخول
 --==================================================================
 switchTab("home")
 applyBlur()
@@ -2206,4 +2339,4 @@ do
     end
 end
 
-print("[LYNEX HUB v2.5] ✦ Ready — Spectate System + Players tab + Search")
+print("[LYNEX HUB v2.6] ✦ Ready — Persistent Spectate + Players tab + Search")
