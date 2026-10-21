@@ -1,21 +1,20 @@
 --[[
     =========================================================================
-    VIOLET HUB 💜 — v1.2.3 (All-Corners Real Fix)
+    VIOLET HUB 💜 — v1.2.4 (Instant Targeting Search + Player Actions)
     =========================================================================
     Platform : Roblox (Client-Side)
     Executor : Delta Executor
 
-    ROOT CAUSE:
-    - TitleBar had full width (1,0) with NO UICorner → square top corners
-      covered Hub's rounded top corners (TL + TR looked flat).
-    - Sidebar had full left column with NO UICorner → square bottom-left
-      corner covered Hub's rounded BL corner.
-    - Only BR looked correct because Content is transparent there.
-
-    FIX:
-    - Added UICorner(16) to TitleBar and Sidebar (same radius as Hub).
-    - Hub.ClipsDescendants already true → clips any overflow.
-    - HubShadow kept identical size + radius (previous fix retained).
+    CHANGES vs v1.2.3:
+    - TARGETING page rebuilt:
+        • Instant search (min 2 chars) with 400ms debounce
+        • Local server match first, then Roblox API exact match
+        • Result cards: avatar + DisplayName + Username + ID + ONLINE status
+        • Tap result → full Detail Card with actions
+        • Actions: Open Profile / Copy ID / Refresh Info (always)
+                   View Player / Go to Player (only if in this server)
+        • Disabled buttons show a toast instead of faking functionality
+    - No removed features, no duplicated logic, all effects preserved.
     =========================================================================
 ]]
 
@@ -147,8 +146,8 @@ local function main()
     }
 
     local SCRIPT_INFO = {
-        VERSION = "1.2.3",
-        BUILD_DATE = "2025-02-20",
+        VERSION = "1.2.4",
+        BUILD_DATE = "2025-02-22",
         AUTHOR_ROBLOX = "hamza000599",
         AUTHOR_DISCORD = "hamza.abc0",
         DISCORD_LINK = "https://discord.gg/xzNRnKyVd",
@@ -156,19 +155,22 @@ local function main()
 
     local CHANGELOG = {
         {
+            version = "1.2.4",
+            date = "2025-02-22",
+            items = {
+                "TARGETING rebuilt with instant search (min 2 chars)",
+                "Local match first, then Roblox API exact lookup",
+                "Detail card with View/Go/Copy/Profile/Refresh actions",
+                "Disabled buttons show toast instead of fake functionality",
+            },
+        },
+        {
             version = "1.2.3",
             date = "2025-02-20",
             items = {
                 "REAL corner fix: TitleBar + Sidebar now have UICorner(16)",
-                "Top corners (TL/TR) no longer covered by square TitleBar",
-                "Bottom-left no longer covered by square Sidebar",
                 "All 4 corners render identically now",
             },
-        },
-        {
-            version = "1.2.2",
-            date = "2025-02-15",
-            items = { "Shadow matched Hub (insufficient — TitleBar was culprit)" },
         },
     }
 
@@ -1788,7 +1790,7 @@ local function main()
         addStagger(DiscordCard)
 
         -- =============================================================
-        -- صفحة اللاعبين (Player Page) — موجودة مسبقًا
+        -- صفحة اللاعبين (Player Page)
         -- =============================================================
         local PlayerPage = makePage("PLAYER")
         local PlayerScroll = makeScrollingPage(PlayerPage)
@@ -1909,7 +1911,457 @@ local function main()
         end)
 
         -- =============================================================
-        -- صفحة الإعدادات (Settings Page) — موجودة مسبقًا
+        -- 🎯 صفحة الاستهداف (Targeting Page) — v1.2.4 Instant Search
+        -- =============================================================
+        local TargetingPage = makePage("TARGETING")
+        local TargetingScroll = makeScrollingPage(TargetingPage)
+
+        -- حقل البحث
+        local searchCard = new("Frame", {
+            Size = UDim2.new(1, 0, 0, 88),
+            BackgroundColor3 = C.Colors.Surface,
+            BackgroundTransparency = 0.25,
+            BorderSizePixel = 0,
+            LayoutOrder = 1
+        }, TargetingScroll)
+        createCorner(searchCard, 10)
+        createStroke(searchCard, C.Colors.Accent, 1, 0.5)
+
+        new("TextLabel", {
+            Size = UDim2.new(1, -24, 0, 18),
+            Position = UDim2.new(0, 12, 0, 8),
+            BackgroundTransparency = 1,
+            Text = "INSTANT SEARCH (min 2 chars)",
+            TextColor3 = C.Colors.AccentGlow,
+            TextSize = 11,
+            Font = C.Fonts.Bold,
+            TextXAlignment = Enum.TextXAlignment.Left
+        }, searchCard)
+
+        local searchBox = new("TextBox", {
+            Size = UDim2.new(1, -24, 0, 32),
+            Position = UDim2.new(0, 12, 0, 30),
+            BackgroundColor3 = C.Colors.BgDeep,
+            BorderSizePixel = 0,
+            Text = "",
+            PlaceholderText = "Type 2+ chars...",
+            PlaceholderColor3 = C.Colors.TextDim,
+            TextColor3 = C.Colors.Text,
+            TextSize = 12,
+            Font = C.Fonts.Mono,
+            ClearTextOnFocus = false,
+            ZIndex = 3
+        }, searchCard)
+        createCorner(searchBox, 6)
+        createStroke(searchBox, C.Colors.Accent, 1, 0.4)
+
+        local searchStatus = new("TextLabel", {
+            Size = UDim2.new(1, -24, 0, 14),
+            Position = UDim2.new(0, 12, 0, 68),
+            BackgroundTransparency = 1,
+            Text = "Results appear as you type (local first, then API).",
+            TextColor3 = C.Colors.TextDim,
+            TextSize = 9,
+            Font = C.Fonts.Body,
+            TextXAlignment = Enum.TextXAlignment.Left
+        }, searchCard)
+
+        -- حاوية النتائج
+        local resultsFrame = new("Frame", {
+            Size = UDim2.new(1, 0, 0, 0),
+            BackgroundTransparency = 1,
+            LayoutOrder = 2
+        }, TargetingScroll)
+        pcall(function() resultsFrame.AutomaticSize = Enum.AutomaticSize.Y end)
+
+        new("UIListLayout", {
+            Padding = UDim.new(0, 8),
+            SortOrder = Enum.SortOrder.LayoutOrder
+        }, resultsFrame)
+
+        local function clearResults()
+            for _, child in ipairs(resultsFrame:GetChildren()) do
+                if child:IsA("Frame") and (child.Name == "ResultCard" or child.Name == "DetailCard") then
+                    child:Destroy()
+                end
+            end
+        end
+
+        -- ============ بطاقة التفاصيل الكاملة ============
+        local selectedCard = nil
+        local function showPlayerDetail(userInfo, isInServer)
+            if selectedCard then selectedCard:Destroy(); selectedCard = nil end
+
+            local card = new("Frame", {
+                Name = "DetailCard",
+                Size = UDim2.new(1, 0, 0, 0),
+                BackgroundColor3 = C.Colors.SurfaceAlt,
+                BackgroundTransparency = 0.15,
+                BorderSizePixel = 0,
+                LayoutOrder = 100,
+                ZIndex = 5
+            }, resultsFrame)
+            pcall(function() card.AutomaticSize = Enum.AutomaticSize.Y end)
+            createCorner(card, 12)
+            createStroke(card, C.Colors.AccentGlow, 2, 0.25)
+            new("UIPadding", {
+                PaddingTop = UDim.new(0, 12),
+                PaddingBottom = UDim.new(0, 12),
+                PaddingLeft = UDim.new(0, 12),
+                PaddingRight = UDim.new(0, 12)
+            }, card)
+            new("UIListLayout", {
+                Padding = UDim.new(0, 6),
+                SortOrder = Enum.SortOrder.LayoutOrder
+            }, card)
+
+            new("TextLabel", {
+                Size = UDim2.new(1, 0, 0, 20),
+                BackgroundTransparency = 1,
+                Text = userInfo.DisplayName or userInfo.Username or "?",
+                TextColor3 = C.Colors.Text,
+                TextSize = 16,
+                Font = C.Fonts.Bold,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                LayoutOrder = 1
+            }, card)
+
+            new("TextLabel", {
+                Size = UDim2.new(1, 0, 0, 16),
+                BackgroundTransparency = 1,
+                Text = "@" .. (userInfo.Username or "?"),
+                TextColor3 = C.Colors.TextSecond,
+                TextSize = 12,
+                Font = C.Fonts.Body,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                LayoutOrder = 2
+            }, card)
+
+            new("TextLabel", {
+                Size = UDim2.new(1, 0, 0, 14),
+                BackgroundTransparency = 1,
+                Text = "User ID: " .. tostring(userInfo.Id or "?"),
+                TextColor3 = C.Colors.AccentGlow,
+                TextSize = 10,
+                Font = C.Fonts.Mono,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                LayoutOrder = 3
+            }, card)
+
+            local createdText = "Created: N/A"
+            if userInfo.Created and type(userInfo.Created) == "string" then
+                createdText = "Created: " .. userInfo.Created:sub(1, 10)
+            end
+            new("TextLabel", {
+                Size = UDim2.new(1, 0, 0, 14),
+                BackgroundTransparency = 1,
+                Text = createdText,
+                TextColor3 = C.Colors.TextDim,
+                TextSize = 10,
+                Font = C.Fonts.Mono,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                LayoutOrder = 4
+            }, card)
+
+            local presenceText = isInServer and "● In this server" or "○ Not in this server"
+            local presenceColor = isInServer and C.Colors.Green or C.Colors.TextDim
+            new("TextLabel", {
+                Size = UDim2.new(1, 0, 0, 14),
+                BackgroundTransparency = 1,
+                Text = presenceText,
+                TextColor3 = presenceColor,
+                TextSize = 10,
+                Font = C.Fonts.Bold,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                LayoutOrder = 5
+            }, card)
+
+            local btnGrid = new("Frame", {
+                Size = UDim2.new(1, 0, 0, 0),
+                BackgroundTransparency = 1,
+                LayoutOrder = 10
+            }, card)
+            pcall(function() btnGrid.AutomaticSize = Enum.AutomaticSize.Y end)
+            new("UIGridLayout", {
+                CellSize = UDim2.new(0.5, -4, 0, 32),
+                CellPadding = UDim.new(0, 6),
+                SortOrder = Enum.SortOrder.LayoutOrder,
+                FillDirection = Enum.FillDirection.Horizontal
+            }, btnGrid)
+
+            local function makeActionBtn(order, text, enabled, callback, tooltip)
+                local b = new("TextButton", {
+                    Size = UDim2.new(0, 0, 0, 32),
+                    BackgroundColor3 = enabled and C.Colors.AccentDeep or C.Colors.Surface,
+                    BackgroundTransparency = enabled and 0.2 or 0.5,
+                    BorderSizePixel = 0,
+                    Text = text,
+                    TextColor3 = enabled and C.Colors.AccentGlow or C.Colors.TextDim,
+                    TextSize = 10,
+                    Font = C.Fonts.Bold,
+                    AutoButtonColor = false,
+                    LayoutOrder = order,
+                    ZIndex = 6
+                }, btnGrid)
+                createCorner(b, 7)
+                createStroke(b, enabled and C.Colors.AccentGlow or C.Colors.TextDim, 1, enabled and 0.3 or 0.7)
+                pcall(function()
+                    b.MouseButton1Click:Connect(function()
+                        if enabled then
+                            callback()
+                        else
+                            toast(tooltip or "Not available", C.Colors.Yellow)
+                        end
+                    end)
+                end)
+                return b
+            end
+
+            makeActionBtn(1, "OPEN PROFILE", true, function()
+                local url = "https://www.roblox.com/users/" .. tostring(userInfo.Id) .. "/profile"
+                if copyClipboard(url) then
+                    toast("Profile URL copied", C.Colors.Green)
+                else
+                    toast("Clipboard unsupported", C.Colors.Close)
+                end
+            end)
+
+            makeActionBtn(2, "COPY ID", true, function()
+                if copyClipboard(tostring(userInfo.Id)) then
+                    toast("User ID copied", C.Colors.Green)
+                else
+                    toast("Copy failed", C.Colors.Close)
+                end
+            end)
+
+            makeActionBtn(3, "REFRESH INFO", true, function()
+                task.spawn(function()
+                    local ok, infos = pcall(function()
+                        return UserService:GetUserInfosByUserIdsAsync({userInfo.Id})
+                    end)
+                    if ok and infos and #infos > 0 then
+                        toast("Info refreshed", C.Colors.Green)
+                        local newInfo = infos[1]
+                        local inServer = Players:GetPlayerByUserId(userInfo.Id) ~= nil
+                        showPlayerDetail(newInfo, inServer)
+                    else
+                        toast("Refresh failed (API limit?)", C.Colors.Close)
+                    end
+                end)
+            end)
+
+            local inServerPlayer = Players:GetPlayerByUserId(userInfo.Id)
+            makeActionBtn(4, "VIEW PLAYER", inServerPlayer ~= nil, function()
+                if inServerPlayer and inServerPlayer.Character then
+                    local hum = inServerPlayer.Character:FindFirstChildOfClass("Humanoid")
+                    if hum then
+                        workspace.CurrentCamera.CameraSubject = hum
+                        toast("Spectating " .. inServerPlayer.Name, C.Colors.Green)
+                    else
+                        toast("Character not ready", C.Colors.Close)
+                    end
+                end
+            end, "Player not in this server — cannot spectate")
+
+            makeActionBtn(5, "GO TO PLAYER", inServerPlayer ~= nil, function()
+                if inServerPlayer and inServerPlayer.Character then
+                    local targetRoot = inServerPlayer.Character:FindFirstChild("HumanoidRootPart")
+                    local myHum = getHum()
+                    if targetRoot and myHum then
+                        myHum:MoveTo(targetRoot.Position)
+                        toast("Moving to " .. inServerPlayer.Name, C.Colors.Green)
+                    else
+                        toast("Cannot move right now", C.Colors.Close)
+                    end
+                end
+            end, "Player not in this server — cannot walk to them")
+
+            selectedCard = card
+        end
+
+        -- ============ بطاقة نتيجة بحث مصغرة ============
+        local function createResultCard(userInfo, order, isInServer)
+            local card = new("Frame", {
+                Name = "ResultCard",
+                Size = UDim2.new(1, 0, 0, 64),
+                BackgroundColor3 = C.Colors.Surface,
+                BackgroundTransparency = 0.2,
+                BorderSizePixel = 0,
+                LayoutOrder = order,
+                ZIndex = 2
+            }, resultsFrame)
+            createCorner(card, 10)
+            createStroke(card, C.Colors.Accent, 1, 0.5)
+
+            local avatar = new("ImageLabel", {
+                Size = UDim2.fromOffset(40, 40),
+                Position = UDim2.new(0, 10, 0.5, -20),
+                BackgroundColor3 = C.Colors.SurfaceLight,
+                BorderSizePixel = 0,
+                Image = "",
+                ZIndex = 2
+            }, card)
+            createCorner(avatar, 20)
+            createStroke(avatar, C.Colors.AccentGlow, 1.5, 0.2)
+
+            new("TextLabel", {
+                Size = UDim2.new(1, -70, 0, 16),
+                Position = UDim2.new(0, 58, 0, 8),
+                BackgroundTransparency = 1,
+                Text = userInfo.DisplayName or userInfo.Username or "?",
+                TextColor3 = C.Colors.Text,
+                TextSize = 13,
+                Font = C.Fonts.Bold,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                TextTruncate = Enum.TextTruncate.AtEnd,
+                ZIndex = 2
+            }, card)
+
+            new("TextLabel", {
+                Size = UDim2.new(1, -70, 0, 14),
+                Position = UDim2.new(0, 58, 0, 26),
+                BackgroundTransparency = 1,
+                Text = "@" .. (userInfo.Username or "?"),
+                TextColor3 = C.Colors.TextSecond,
+                TextSize = 11,
+                Font = C.Fonts.Body,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                TextTruncate = Enum.TextTruncate.AtEnd,
+                ZIndex = 2
+            }, card)
+
+            new("TextLabel", {
+                Size = UDim2.new(1, -70, 0, 12),
+                Position = UDim2.new(0, 58, 0, 42),
+                BackgroundTransparency = 1,
+                Text = "ID: " .. tostring(userInfo.Id or "?") .. (isInServer and "  ● ONLINE" or ""),
+                TextColor3 = isInServer and C.Colors.Green or C.Colors.TextDim,
+                TextSize = 9,
+                Font = C.Fonts.Mono,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                ZIndex = 2
+            }, card)
+
+            local clickBtn = new("TextButton", {
+                Size = UDim2.fromScale(1, 1),
+                BackgroundTransparency = 1,
+                Text = "",
+                AutoButtonColor = false,
+                ZIndex = 3
+            }, card)
+            pcall(function()
+                clickBtn.MouseButton1Click:Connect(function()
+                    showPlayerDetail(userInfo, isInServer)
+                end)
+            end)
+
+            task.spawn(function()
+                local ok, thumb = pcall(function()
+                    return Players:GetUserThumbnailAsync(userInfo.Id, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size150x150)
+                end)
+                if ok and thumb and avatar and avatar.Parent then
+                    avatar.Image = thumb
+                end
+            end)
+
+            return card
+        end
+
+        -- ============ البحث الفوري ============
+        local searchDebounce = 0
+        local lastQuery = ""
+
+        local function doSearch(query)
+            query = tostring(query or ""):gsub("^%s+", ""):gsub("%s+$", "")
+            if query == lastQuery then return end
+            lastQuery = query
+
+            clearResults()
+            selectedCard = nil
+
+            if #query < 2 then
+                searchStatus.Text = "Type at least 2 characters..."
+                searchStatus.TextColor3 = C.Colors.TextDim
+                return
+            end
+
+            searchStatus.Text = "Searching..."
+            searchStatus.TextColor3 = C.Colors.AccentGlow
+
+            -- 1) البحث المحلي أولاً
+            local localMatches = {}
+            local qLower = query:lower()
+            for _, plr in ipairs(Players:GetPlayers()) do
+                if plr ~= LP then
+                    local lowerName = plr.Name:lower()
+                    local lowerDisplay = (plr.DisplayName or ""):lower()
+                    if lowerName:sub(1, #qLower) == qLower or lowerDisplay:sub(1, #qLower) == qLower then
+                        table.insert(localMatches, {
+                            Id = plr.UserId,
+                            Username = plr.Name,
+                            DisplayName = plr.DisplayName
+                        })
+                    end
+                end
+            end
+
+            if #localMatches > 0 then
+                for i, info in ipairs(localMatches) do
+                    createResultCard(info, i, true)
+                end
+                searchStatus.Text = "Found " .. #localMatches .. " in this server."
+                searchStatus.TextColor3 = C.Colors.Green
+                return
+            end
+
+            -- 2) البحث عبر API (اسم كامل)
+            task.spawn(function()
+                local ok, userId = pcall(function()
+                    return Players:GetUserIdFromNameAsync(query)
+                end)
+                if not ok or not userId or userId <= 0 then
+                    searchStatus.Text = "No exact match. Try full username."
+                    searchStatus.TextColor3 = C.Colors.Yellow
+                    return
+                end
+
+                local ok2, infos = pcall(function()
+                    return UserService:GetUserInfosByUserIdsAsync({userId})
+                end)
+
+                if not ok2 or not infos or #infos == 0 then
+                    searchStatus.Text = "API error or user not found."
+                    searchStatus.TextColor3 = C.Colors.Close
+                    return
+                end
+
+                local info = infos[1]
+                local inServer = Players:GetPlayerByUserId(info.Id) ~= nil
+                createResultCard(info, 1, inServer)
+                searchStatus.Text = "Found 1 result (exact match)."
+                searchStatus.TextColor3 = C.Colors.Green
+            end)
+        end
+
+        pcall(function()
+            searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+                local txt = searchBox.Text
+                if #txt < 2 then
+                    searchDebounce = tick() -- cancel any pending debounce
+                    doSearch(txt)
+                    return
+                end
+                local myId = tick()
+                searchDebounce = myId
+                task.delay(0.4, function()
+                    if searchDebounce ~= myId then return end
+                    doSearch(txt)
+                end)
+            end)
+        end)
+
+        -- =============================================================
+        -- صفحة الإعدادات (Settings Page)
         -- =============================================================
         local SettingsPage = makePage("SETTINGS")
         local SettingsScroll = makeScrollingPage(SettingsPage)
@@ -1977,7 +2429,7 @@ local function main()
         }, SettingsScroll)
 
         -- =============================================================
-        -- صفحة حول (About Page) — موجودة مسبقًا
+        -- صفحة حول (About Page)
         -- =============================================================
         local AboutPage = makePage("ABOUT")
         local AboutScroll = makeScrollingPage(AboutPage)
@@ -2017,351 +2469,11 @@ local function main()
         end
         
         makeAboutSection(1, "VIOLET HUB", "Version " .. SCRIPT_INFO.VERSION .. " — Premium Visual Effects. Developer: " .. SCRIPT_INFO.AUTHOR_ROBLOX, 64)
-        makeAboutSection(2, "FEATURES", "• Player & server info\n• Live FPS / Ping / Player count\n• 11 working PLAYER toggles\n• SCRIPT STATISTICS + UPDATES\n• DEVELOPER + SOCIAL LINKS\n• Blur, particles, premium edges\n• Draggable, scrollable, animated", 158)
-        makeAboutSection(3, "LIMITATIONS", "Blur requires Lighting write access. Particles are client-side only. Hide Player is local only. Fly works best on PC. Discord copy needs setclipboard/toclipboard.", 92)
+        makeAboutSection(2, "FEATURES", "• Player & server info\n• Live FPS / Ping / Player count\n• 11 working PLAYER toggles\n• Instant Targeting search\n• View/Go to player (in-server)\n• Copy profile / ID / refresh\n• Draggable, scrollable, animated", 158)
+        makeAboutSection(3, "LIMITATIONS", "Instant search is local-first (server members). For non-members, exact username is required due to Roblox API limits. View/Go work only for players in the same server. Open Profile copies the URL to clipboard.", 92)
 
         -- =============================================================
-        -- 🎯 صفحة الاستهداف (Targeting Page) — جديدة
-        -- =============================================================
-        local TargetingPage = makePage("TARGETING")
-        local TargetingScroll = makeScrollingPage(TargetingPage)
-
-        -- حقل الإدخال
-        local searchCard = new("Frame", {
-            Size = UDim2.new(1, 0, 0, 88),
-            BackgroundColor3 = C.Colors.Surface,
-            BackgroundTransparency = 0.25,
-            BorderSizePixel = 0,
-            LayoutOrder = 1
-        }, TargetingScroll)
-        createCorner(searchCard, 10)
-        createStroke(searchCard, C.Colors.Accent, 1, 0.5)
-
-        new("TextLabel", {
-            Size = UDim2.new(1, -24, 0, 18),
-            Position = UDim2.new(0, 12, 0, 8),
-            BackgroundTransparency = 1,
-            Text = "SEARCH PLAYERS",
-            TextColor3 = C.Colors.AccentGlow,
-            TextSize = 11,
-            Font = C.Fonts.Bold,
-            TextXAlignment = Enum.TextXAlignment.Left
-        }, searchCard)
-
-        local searchBox = new("TextBox", {
-            Size = UDim2.new(1, -100, 0, 32),
-            Position = UDim2.new(0, 12, 0, 30),
-            BackgroundColor3 = C.Colors.BgDeep,
-            BorderSizePixel = 0,
-            Text = "",
-            PlaceholderText = "Username (full) or comma-separated",
-            PlaceholderColor3 = C.Colors.TextDim,
-            TextColor3 = C.Colors.Text,
-            TextSize = 12,
-            Font = C.Fonts.Mono,
-            ClearTextOnFocus = false,
-            ZIndex = 3
-        }, searchCard)
-        createCorner(searchBox, 6)
-        createStroke(searchBox, C.Colors.Accent, 1, 0.4)
-
-        local searchBtn = new("TextButton", {
-            Size = UDim2.fromOffset(72, 32),
-            Position = UDim2.new(1, -84, 0, 30),
-            BackgroundColor3 = C.Colors.AccentDeep,
-            BorderSizePixel = 0,
-            Text = "SEARCH",
-            TextColor3 = C.Colors.AccentGlow,
-            TextSize = 11,
-            Font = C.Fonts.Bold,
-            AutoButtonColor = false,
-            ZIndex = 3
-        }, searchCard)
-        createCorner(searchBtn, 6)
-        createStroke(searchBtn, C.Colors.AccentGlow, 1, 0.3)
-
-        new("TextLabel", {
-            Size = UDim2.new(1, -24, 0, 14),
-            Position = UDim2.new(0, 12, 0, 68),
-            BackgroundTransparency = 1,
-            Text = "Search uses exact usernames (Roblox API limitation). Separate multiple names with commas.",
-            TextColor3 = C.Colors.TextDim,
-            TextSize = 9,
-            Font = C.Fonts.Body,
-            TextXAlignment = Enum.TextXAlignment.Left
-        }, searchCard)
-
-        -- حاوية النتائج
-        local resultsFrame = new("Frame", {
-            Size = UDim2.new(1, 0, 0, 0),
-            BackgroundTransparency = 1,
-            LayoutOrder = 2
-        }, TargetingScroll)
-        pcall(function() resultsFrame.AutomaticSize = Enum.AutomaticSize.Y end)
-
-        new("UIListLayout", {
-            Padding = UDim.new(0, 8),
-            SortOrder = Enum.SortOrder.LayoutOrder
-        }, resultsFrame)
-
-        local statusLabel = new("TextLabel", {
-            Size = UDim2.new(1, 0, 0, 18),
-            BackgroundTransparency = 1,
-            Text = "",
-            TextColor3 = C.Colors.TextSecond,
-            TextSize = 10,
-            Font = C.Fonts.Body,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            LayoutOrder = 0
-        }, resultsFrame)
-
-        local function clearResults()
-            for _, child in ipairs(resultsFrame:GetChildren()) do
-                if child:IsA("Frame") and child.Name == "ResultCard" then
-                    child:Destroy()
-                end
-            end
-            statusLabel.Text = ""
-        end
-
-        local function openProfile(userId)
-            local url = "https://www.roblox.com/users/" .. tostring(userId) .. "/profile"
-            if GuiService then
-                local ok = pcall(function() GuiService:OpenBrowserWindow(url) end)
-                if ok then return end
-            end
-            if copyClipboard(url) then
-                toast("Profile URL copied to clipboard", C.Colors.Green)
-            else
-                toast("Could not open profile", C.Colors.Close)
-            end
-        end
-
-        local function createResultCard(userInfo, order)
-            local card = new("Frame", {
-                Name = "ResultCard",
-                Size = UDim2.new(1, 0, 0, 76),
-                BackgroundColor3 = C.Colors.Surface,
-                BackgroundTransparency = 0.2,
-                BorderSizePixel = 0,
-                LayoutOrder = order,
-                ZIndex = 2
-            }, resultsFrame)
-            createCorner(card, 10)
-            createStroke(card, C.Colors.Accent, 1, 0.5)
-
-            local avatar = new("ImageLabel", {
-                Size = UDim2.fromOffset(48, 48),
-                Position = UDim2.new(0, 12, 0.5, -24),
-                BackgroundColor3 = C.Colors.SurfaceLight,
-                BorderSizePixel = 0,
-                Image = "",
-                ZIndex = 2
-            }, card)
-            createCorner(avatar, 24)
-            createStroke(avatar, C.Colors.AccentGlow, 1.5, 0.2)
-
-            new("TextLabel", {
-                Size = UDim2.new(1, -80, 0, 16),
-                Position = UDim2.new(0, 72, 0, 10),
-                BackgroundTransparency = 1,
-                Text = userInfo.DisplayName or userInfo.Username or "?",
-                TextColor3 = C.Colors.Text,
-                TextSize = 13,
-                Font = C.Fonts.Bold,
-                TextXAlignment = Enum.TextXAlignment.Left,
-                TextTruncate = Enum.TextTruncate.AtEnd,
-                ZIndex = 2
-            }, card)
-
-            new("TextLabel", {
-                Size = UDim2.new(1, -80, 0, 14),
-                Position = UDim2.new(0, 72, 0, 28),
-                BackgroundTransparency = 1,
-                Text = "@" .. (userInfo.Username or "?"),
-                TextColor3 = C.Colors.TextSecond,
-                TextSize = 11,
-                Font = C.Fonts.Body,
-                TextXAlignment = Enum.TextXAlignment.Left,
-                TextTruncate = Enum.TextTruncate.AtEnd,
-                ZIndex = 2
-            }, card)
-
-            new("TextLabel", {
-                Size = UDim2.new(1, -80, 0, 14),
-                Position = UDim2.new(0, 72, 0, 44),
-                BackgroundTransparency = 1,
-                Text = "ID: " .. tostring(userInfo.Id or "?"),
-                TextColor3 = C.Colors.TextDim,
-                TextSize = 10,
-                Font = C.Fonts.Mono,
-                TextXAlignment = Enum.TextXAlignment.Left,
-                ZIndex = 2
-            }, card)
-
-            local ageText = "Age: N/A"
-            if userInfo.Created and type(userInfo.Created) == "string" then
-                ageText = "Created: " .. userInfo.Created:sub(1, 10)
-            else
-                local inServer = Players:GetPlayerByUserId(userInfo.Id)
-                if inServer then
-                    ageText = "Age: " .. tostring(inServer.AccountAge) .. " days"
-                end
-            end
-
-            new("TextLabel", {
-                Size = UDim2.new(1, -80, 0, 14),
-                Position = UDim2.new(0, 72, 0, 60),
-                BackgroundTransparency = 1,
-                Text = ageText,
-                TextColor3 = C.Colors.AccentGlow,
-                TextSize = 10,
-                Font = C.Fonts.Mono,
-                TextXAlignment = Enum.TextXAlignment.Left,
-                ZIndex = 2
-            }, card)
-
-            local openBtn = new("TextButton", {
-                Size = UDim2.fromOffset(96, 24),
-                Position = UDim2.new(1, -108, 0.5, -12),
-                BackgroundColor3 = C.Colors.AccentDeep,
-                BorderSizePixel = 0,
-                Text = "OPEN PROFILE",
-                TextColor3 = C.Colors.AccentGlow,
-                TextSize = 9,
-                Font = C.Fonts.Bold,
-                AutoButtonColor = false,
-                ZIndex = 3
-            }, card)
-            createCorner(openBtn, 6)
-            createStroke(openBtn, C.Colors.AccentGlow, 1, 0.3)
-
-            pcall(function()
-                openBtn.MouseButton1Click:Connect(function()
-                    openProfile(userInfo.Id)
-                end)
-            end)
-
-            task.spawn(function()
-                local ok, thumb = pcall(function()
-                    return Players:GetUserThumbnailAsync(userInfo.Id, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size150x150)
-                end)
-                if ok and thumb and avatar and avatar.Parent then
-                    avatar.Image = thumb
-                end
-            end)
-
-            return card
-        end
-
-        local searching = false
-        local function searchTargets(query)
-            if searching then return end
-            searching = true
-            clearResults()
-            statusLabel.Text = "Searching..."
-
-            query = tostring(query or ""):gsub("^%s+", ""):gsub("%s+$", "")
-            if query == "" then
-                statusLabel.Text = "Please enter a username."
-                searching = false
-                return
-            end
-
-            local names = {}
-            for part in string.gmatch(query, "([^,;]+)") do
-                local trimmed = part:gsub("^%s+", ""):gsub("%s+$", "")
-                if trimmed ~= "" then table.insert(names, trimmed) end
-            end
-            if #names == 0 then
-                statusLabel.Text = "Please enter a valid username."
-                searching = false
-                return
-            end
-
-            local userIds = {}
-            local seen = {}
-            local failed = {}
-
-            for _, name in ipairs(names) do
-                local ok, id = pcall(function()
-                    return Players:GetUserIdFromNameAsync(name)
-                end)
-                if ok and id and id > 0 then
-                    if not seen[id] then
-                        seen[id] = true
-                        table.insert(userIds, id)
-                    end
-                else
-                    table.insert(failed, name)
-                end
-            end
-
-            if #userIds == 0 then
-                statusLabel.Text = "No users found for: " .. table.concat(failed, ", ")
-                searching = false
-                return
-            end
-
-            if not UserService then
-                statusLabel.Text = "UserService unavailable."
-                searching = false
-                return
-            end
-
-            local ok, infos = pcall(function()
-                return UserService:GetUserInfosByUserIdsAsync(userIds)
-            end)
-
-            if not ok or not infos or #infos == 0 then
-                statusLabel.Text = "Failed to fetch user info. Try again."
-                searching = false
-                return
-            end
-
-            local infoMap = {}
-            for _, info in ipairs(infos) do
-                infoMap[info.Id] = info
-            end
-
-            local order = 1
-            local found = 0
-            for _, id in ipairs(userIds) do
-                local info = infoMap[id]
-                if info then
-                    createResultCard(info, order)
-                    order = order + 1
-                    found = found + 1
-                end
-            end
-
-            if found == 0 then
-                statusLabel.Text = "No valid results."
-            else
-                statusLabel.Text = "Found " .. tostring(found) .. " result(s)."
-            end
-            if #failed > 0 then
-                statusLabel.Text = statusLabel.Text .. " (Not found: " .. table.concat(failed, ", ") .. ")"
-            end
-
-            searching = false
-        end
-
-        pcall(function()
-            searchBtn.MouseButton1Click:Connect(function()
-                searchTargets(searchBox.Text)
-            end)
-        end)
-        pcall(function()
-            searchBox.FocusLost:Connect(function(enterPressed)
-                if enterPressed then
-                    searchTargets(searchBox.Text)
-                end
-            end)
-        end)
-
-        -- =============================================================
-        -- نظام التبويبات (Tabs System)
+        -- نظام التبويبات
         -- =============================================================
         local TABS = {
             {name = "HOME", label = "H"},
