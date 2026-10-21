@@ -1,18 +1,18 @@
 --[[
     =========================================================================
-    VIOLET HUB 💜 — v1.2.5 (Targeting View Toggle + Instant Teleport)
+    VIOLET HUB 💜 — v1.2.6 (Targeting Fixes + Robust Camera State)
     =========================================================================
     Platform : Roblox (Client-Side)
     Executor : Delta Executor
 
-    FIXES vs v1.2.4:
-    - View Player now toggles: press to view, press again to stop.
-    - Original CameraSubject is saved and restored on stop.
-    - Monitor disconnects when target leaves; camera auto-restores.
-    - Auto-switches view when user picks another player while viewing.
-    - stopViewing() is called on tab switch away from TARGETING and on hideHub.
-    - Go to Player uses Character:PivotTo() for instant teleport (no walking).
-    - Verifies teleport within 0.5s and shows "blocked by game" if snapped back.
+    FIXES vs v1.2.5:
+    1. startViewing now returns boolean + restores camera on failure
+    2. pcall around CameraSubject assignment (locked-camera games)
+    3. restoreCamera has fallback to LocalPlayer Humanoid if original nil
+    4. showPlayerDetail handles startViewing failure by restoring camera
+    5. makeActionBtn always invokes callback; runtime state checked inside
+    6. stopViewing null-safe when button destroyed or state cleared
+    7. All view/teleport callbacks re-check Players:GetPlayerByUserId at click
     =========================================================================
 ]]
 
@@ -58,7 +58,7 @@ local function main()
     local MarketplaceService
     local UserService
     local GuiService
-    
+
     pcall(function() TeleportService = game:GetService("TeleportService") end)
     pcall(function() MarketplaceService = game:GetService("MarketplaceService") end)
     pcall(function() UserService = game:GetService("UserService") end)
@@ -144,8 +144,8 @@ local function main()
     }
 
     local SCRIPT_INFO = {
-        VERSION = "1.2.5",
-        BUILD_DATE = "2025-02-23",
+        VERSION = "1.2.6",
+        BUILD_DATE = "2025-02-25",
         AUTHOR_ROBLOX = "hamza000599",
         AUTHOR_DISCORD = "hamza.abc0",
         DISCORD_LINK = "https://discord.gg/xzNRnKyVd",
@@ -153,22 +153,22 @@ local function main()
 
     local CHANGELOG = {
         {
-            version = "1.2.5",
-            date = "2025-02-23",
+            version = "1.2.6",
+            date = "2025-02-25",
             items = {
-                "View Player toggles: press to view, press again to stop",
-                "Original CameraSubject saved/restored on stop",
-                "Auto-switch view when picking another player while viewing",
-                "Go to Player now uses Character:PivotTo() instant teleport",
-                "Teleport verified after 0.5s; 'blocked' toast if rejected",
+                "startViewing returns boolean + restores camera on failure",
+                "restoreCamera falls back to LocalPlayer Humanoid",
+                "pcall around CameraSubject assignment",
+                "Buttons re-check player presence at click time",
+                "showPlayerDetail handles view-switch failure",
             },
         },
         {
-            version = "1.2.4",
-            date = "2025-02-22",
+            version = "1.2.5",
+            date = "2025-02-23",
             items = {
-                "TARGETING rebuilt with instant search (min 2 chars)",
-                "Detail card with action buttons",
+                "View Player toggles",
+                "Go to Player uses PivotTo teleport",
             },
         },
     }
@@ -246,7 +246,7 @@ local function main()
 
         local HubBlur = nil
         local backdropOverlay = nil
-        
+
         local blurOk, blurObj = pcall(function()
             local b = Instance.new("BlurEffect")
             b.Name = "VioletHubBlur"
@@ -255,7 +255,7 @@ local function main()
             b.Parent = Lighting
             return b
         end)
-        
+
         if blurOk and blurObj then
             HubBlur = blurObj
         else
@@ -374,7 +374,7 @@ local function main()
             for _, p in ipairs(rainParticles) do
                 if p and p.Parent then pcall(function() p:Destroy() end) end
             end
-            table.clear(rainParticles)
+            if table.clear then table.clear(rainParticles) else rainParticles = {} end
             if RainLayer and RainLayer.Parent then RainLayer:Destroy() end
             RainLayer = nil
         end
@@ -400,7 +400,7 @@ local function main()
         local function startRain()
             if rainRunning then return end
             rainRunning = true
-            table.clear(rainParticles)
+            if table.clear then table.clear(rainParticles) else rainParticles = {} end
             RainLayer = new("Frame", {
                 Name = "RainLayer",
                 Size = UDim2.new(1, 0, 1, -34),
@@ -445,7 +445,7 @@ local function main()
             ColorSequenceKeypoint.new(0, C.Colors.AccentDeep),
             ColorSequenceKeypoint.new(1, C.Colors.SurfaceAlt)
         }))
-        
+
         new("TextLabel", {
             Size = UDim2.new(1, -96, 1, 0),
             Position = UDim2.new(0, 14, 0, 0),
@@ -474,7 +474,7 @@ local function main()
             createCorner(btn, 7)
             return btn
         end
-        
+
         local CloseBtn = createTitleButton("X", C.Colors.Close, -32)
         local HideBtn  = createTitleButton("_", C.Colors.TextSecond, -60)
 
@@ -490,7 +490,7 @@ local function main()
             ZIndex = 3
         }, Hub)
         createCorner(Sidebar, HUB_RADIUS)
-        
+
         local Indicator = new("Frame", {
             Name = "Indicator",
             Size = UDim2.new(0, 3, 0, 34),
@@ -500,7 +500,7 @@ local function main()
             ZIndex = 3
         }, Sidebar)
         createCorner(Indicator, 2)
-        
+
         local TabList = new("Frame", {
             Name = "TabList",
             Size = UDim2.new(1, -6, 1, -16),
@@ -508,7 +508,7 @@ local function main()
             BackgroundTransparency = 1,
             ZIndex = 3
         }, Sidebar)
-        
+
         new("UIListLayout", {
             FillDirection = Enum.FillDirection.Vertical,
             Padding = UDim.new(0, 5),
@@ -527,7 +527,7 @@ local function main()
 
         local Pages = {}
         local CurrentPage = nil
-        
+
         local function makePage(name)
             local p = new("Frame", {
                 Name = name,
@@ -664,7 +664,7 @@ local function main()
         }, Hub)
         createCorner(Toast, 10)
         createStroke(Toast, C.Colors.Accent, 1, 0.3)
-        
+
         local toastTok = 0
         local function toast(msg, color)
             toastTok = toastTok + 1
@@ -875,9 +875,9 @@ local function main()
             gravity = {on = false, value = 196.2, original = nil},
             spin = {on = false, instance = nil},
         }
-        
+
         local startTick = tick()
-        
+
         local function formatUptime()
             local secs = math.floor(tick() - startTick)
             local m = math.floor(secs / 60)
@@ -888,7 +888,7 @@ local function main()
             if m > 0 then return string.format("%dm %ds", m, secs) end
             return string.format("%ds", secs)
         end
-        
+
         local function countActive()
             local count = 0
             for _, key in ipairs({"walkSpeed", "jumpPower", "fly", "infiniteJump", "doubleJump", "airSwim", "ipadView", "hidePlayer", "gravity", "spin"}) do
@@ -1119,7 +1119,7 @@ local function main()
             if state.gravity.on then enableGrav() end
             if state.spin.on then enableSpin() end
         end
-        
+
         local function cleanupAll()
             disableFly(); disableInfJump(); disableDblJump(); disableAirSwim()
             disableHide(); disableSpin(); disableWalkSpeed(); disableJumpPower()
@@ -1131,6 +1131,7 @@ local function main()
             end
         end
 
+        -- ============ HOME PAGE ============
         local HomePage = makePage("HOME")
         local HomeScroll = makeScrollingPage(HomePage)
 
@@ -1147,7 +1148,7 @@ local function main()
             ColorSequenceKeypoint.new(0, C.Colors.AccentDeep),
             ColorSequenceKeypoint.new(1, C.Colors.SurfaceLight)
         }))
-        
+
         new("TextLabel", {
             Size = UDim2.new(1, -24, 0, 32),
             Position = UDim2.new(0, 14, 0, 10),
@@ -1158,7 +1159,7 @@ local function main()
             Font = C.Fonts.Title,
             TextXAlignment = Enum.TextXAlignment.Left
         }, WelcomeCard)
-        
+
         new("TextLabel", {
             Size = UDim2.new(1, -24, 0, 18),
             Position = UDim2.new(0, 14, 0, 44),
@@ -1169,7 +1170,7 @@ local function main()
             Font = C.Fonts.Body,
             TextXAlignment = Enum.TextXAlignment.Left
         }, WelcomeCard)
-        
+
         local vBadge = new("Frame", {
             Size = UDim2.fromOffset(70, 22),
             Position = UDim2.new(1, -84, 0, 10),
@@ -1178,7 +1179,7 @@ local function main()
             BorderSizePixel = 0
         }, WelcomeCard)
         createCorner(vBadge, 6)
-        
+
         new("TextLabel", {
             Size = UDim2.fromScale(1, 1),
             BackgroundTransparency = 1,
@@ -1199,7 +1200,7 @@ local function main()
         }, ProfileCard)
         createCorner(Avatar, 30)
         createStroke(Avatar, C.Colors.AccentGlow, 2, 0.15)
-        
+
         local DispName = new("TextLabel", {
             Size = UDim2.new(1, -90, 0, 20),
             Position = UDim2.new(0, 82, 0, 16),
@@ -1316,7 +1317,7 @@ local function main()
             LayoutOrder = 13
         }, HomeScroll)
         pcall(function() ServerGrid.AutomaticSize = Enum.AutomaticSize.Y end)
-        
+
         local serverGridLayout = new("UIGridLayout", {
             CellSize = UDim2.new(0.5, -4, 0, 46),
             CellPadding = UDim.new(0, 6),
@@ -1356,7 +1357,7 @@ local function main()
             }, c)
             return c, v
         end
-        
+
         local JobIdCard, JobIdValue = makeServerCard(1, "JOB ID"); addStagger(JobIdCard)
         local MapCard, MapValue = makeServerCard(2, "MAP NAME"); addStagger(MapCard)
         local CountCard, CountValue = makeServerCard(3, "PLAYERS"); addStagger(CountCard)
@@ -1369,7 +1370,7 @@ local function main()
             LayoutOrder = 14
         }, HomeScroll)
         pcall(function() ServerButtons.AutomaticSize = Enum.AutomaticSize.Y end)
-        
+
         new("UIListLayout", {
             FillDirection = Enum.FillDirection.Vertical,
             Padding = UDim.new(0, 5),
@@ -1401,7 +1402,7 @@ local function main()
             }, b)
             return b
         end
-        
+
         local CopyServerBtn = makeServerBtn(1, "COPY SERVER ID"); addStagger(CopyServerBtn)
         local RejoinBtn = makeServerBtn(2, "REJOIN SERVER"); addStagger(RejoinBtn)
         local JoinNewBtn = makeServerBtn(3, "JOIN NEW SERVER"); addStagger(JoinNewBtn)
@@ -1410,7 +1411,7 @@ local function main()
             local ok, j = pcall(function() return game.JobId end)
             if ok and type(j) == "string" and #j > 0 then return j end
         end
-        
+
         local function getPlaceName()
             if MarketplaceService then
                 local ok, info = pcall(function() return MarketplaceService:GetProductInfo(game.PlaceId) end)
@@ -1418,7 +1419,7 @@ local function main()
             end
             return "PlaceId: " .. tostring(game.PlaceId)
         end
-        
+
         local function getPlayerCount()
             local ok, m = pcall(function() return Players.MaxPlayers end)
             local c = 0
@@ -1426,7 +1427,7 @@ local function main()
             if ok and type(m) == "number" and m > 0 then return c .. " / " .. m end
             return tostring(c)
         end
-        
+
         local function loadServerData()
             local j = getJobId()
             JobIdValue.Text = j and (j:sub(1, 8) .. "...") or "N/A"
@@ -1479,7 +1480,7 @@ local function main()
             LayoutOrder = 16
         }, HomeScroll)
         pcall(function() StatsGrid.AutomaticSize = Enum.AutomaticSize.Y end)
-        
+
         local statsGridLayout = new("UIGridLayout", {
             CellSize = UDim2.new(0.5, -4, 0, 46),
             CellPadding = UDim.new(0, 6),
@@ -1519,7 +1520,7 @@ local function main()
             }, c)
             return c, v
         end
-        
+
         local versionCard, VersionValue = makeStatCard(1, "VERSION"); addStagger(versionCard)
         local statusCard, StatusValue = makeStatCard(2, "STATUS"); addStagger(statusCard)
         local lastUpdCard, LastUpdatedValue = makeStatCard(3, "LAST UPDATED"); addStagger(lastUpdCard)
@@ -1587,7 +1588,7 @@ local function main()
             Padding = UDim.new(0, 4),
             SortOrder = Enum.SortOrder.LayoutOrder
         }, UpdatesCard)
-        
+
         local loCounter = 1
         for _, entry in ipairs(CHANGELOG) do
             new("TextLabel", {
@@ -1788,26 +1789,24 @@ local function main()
         end)
         addStagger(DiscordCard)
 
-        -- =============================================================
-        -- صفحة اللاعبين
-        -- =============================================================
+        -- ============ PLAYER PAGE ============
         local PlayerPage = makePage("PLAYER")
         local PlayerScroll = makeScrollingPage(PlayerPage)
 
         makeSectionHeader(PlayerScroll, 1, "MOVEMENT")
-        
+
         local walkRow = makeValueRow(PlayerScroll, 2, "WALK SPEED", 16, 1, 500, function(on, v)
             state.walkSpeed.on = on
             state.walkSpeed.value = v
             if on then enableWalkSpeed() else disableWalkSpeed() end
         end)
-        
+
         local jumpRow = makeValueRow(PlayerScroll, 3, "JUMP POWER", 50, 10, 500, function(on, v)
             state.jumpPower.on = on
             state.jumpPower.value = v
             if on then enableJumpPower() else disableJumpPower() end
         end)
-        
+
         local flyRow = nil
         local flySpeedRow = makeValueRow(PlayerScroll, 4, "FLY SPEED", 50, 10, 500, function(on, v)
             state.flySpeed.on = on
@@ -1819,47 +1818,47 @@ local function main()
                 if flyRow and flyRow.setState then flyRow.setState(on) end
             end
         end)
-        
+
         flyRow = makeToggleRow(PlayerScroll, 5, "FLY", function(on)
             state.fly.on = on
             if on then enableFly() else disableFly() end
             state.flySpeed.on = on
             if flySpeedRow and flySpeedRow.setState then flySpeedRow.setState(on) end
         end)
-        
+
         local infJumpRow = makeToggleRow(PlayerScroll, 6, "INFINITE JUMP", function(on)
             state.infiniteJump.on = on
             if on then enableInfJump() else disableInfJump() end
         end)
-        
+
         local dblJumpRow = makeToggleRow(PlayerScroll, 7, "DOUBLE JUMP", function(on)
             state.doubleJump.on = on
             if on then enableDblJump() else disableDblJump() end
         end)
-        
+
         local airSwimRow = makeToggleRow(PlayerScroll, 8, "AIR SWIM", function(on)
             state.airSwim.on = on
             if on then enableAirSwim() else disableAirSwim() end
         end)
-        
+
         local ipadRow = makeToggleRow(PlayerScroll, 9, "IPAD VIEW", function(on)
             state.ipadView.on = on
             if on then enableIPad() else disableIPad() end
         end)
-        
+
         local hideRow = makeToggleRow(PlayerScroll, 10, "HIDE PLAYER", function(on)
             state.hidePlayer.on = on
             if on then enableHide() else disableHide() end
         end)
 
         makeSectionHeader(PlayerScroll, 11, "PHYSICS")
-        
+
         local gravityRow = makeValueRow(PlayerScroll, 12, "GRAVITY", 196.2, 0, 1000, function(on, v)
             state.gravity.on = on
             state.gravity.value = v
             if on then enableGrav() else disableGrav() end
         end)
-        
+
         local spinRow = makeToggleRow(PlayerScroll, 13, "SPIN", function(on)
             state.spin.on = on
             if on then enableSpin() else disableSpin() end
@@ -1879,7 +1878,7 @@ local function main()
         }, PlayerScroll)
         createCorner(resetBtn, 8)
         createStroke(resetBtn, C.Colors.Accent, 1, 0.4)
-        
+
         pcall(function()
             resetBtn.MouseButton1Click:Connect(function()
                 cleanupAll()
@@ -1910,7 +1909,7 @@ local function main()
         end)
 
         -- =============================================================
-        -- 🎯 صفحة الاستهداف — v1.2.5
+        -- TARGETING PAGE — v1.2.6
         -- =============================================================
         local TargetingPage = makePage("TARGETING")
         local TargetingScroll = makeScrollingPage(TargetingPage)
@@ -1984,7 +1983,7 @@ local function main()
             end
         end
 
-        -- ============ حالة المشاهدة (v1.2.5) ============
+        -- ============ View State ============
         local viewState = {
             active = false,
             originalSubject = nil,
@@ -2003,8 +2002,13 @@ local function main()
 
         local function restoreCamera()
             local cam = workspace.CurrentCamera
-            if cam and viewState.originalSubject then
-                pcall(function() cam.CameraSubject = viewState.originalSubject end)
+            if not cam then return end
+            local target = viewState.originalSubject
+            if not target and LP.Character then
+                target = LP.Character:FindFirstChildOfClass("Humanoid")
+            end
+            if target then
+                pcall(function() cam.CameraSubject = target end)
             end
             viewState.originalSubject = nil
         end
@@ -2019,7 +2023,9 @@ local function main()
             if not keepOriginal then
                 restoreCamera()
             end
-            setViewButtonState(viewState.button, false)
+            if viewState.button then
+                setViewButtonState(viewState.button, false)
+            end
             if showToast then toast("View stopped", C.Colors.TextSecond) end
             viewState.targetPlayer = nil
             viewState.button = nil
@@ -2027,31 +2033,49 @@ local function main()
 
         local function startViewing(player, btn, overrideOriginal)
             local cam = workspace.CurrentCamera
-            if not cam then return end
+            if not cam then return false end
             local char = player and player.Character
             if not char then
                 toast("Character not ready", C.Colors.Close)
-                return
+                if overrideOriginal then
+                    pcall(function() cam.CameraSubject = overrideOriginal end)
+                end
+                return false
             end
             local hum = char:FindFirstChildOfClass("Humanoid")
             if not hum then
                 toast("Character not ready", C.Colors.Close)
-                return
+                if overrideOriginal then
+                    pcall(function() cam.CameraSubject = overrideOriginal end)
+                end
+                return false
             end
             if overrideOriginal ~= nil then
                 viewState.originalSubject = overrideOriginal
             elseif viewState.originalSubject == nil then
-                viewState.originalSubject = cam.CameraSubject
+                local currentSubject = cam.CameraSubject
+                if not currentSubject and LP.Character then
+                    currentSubject = LP.Character:FindFirstChildOfClass("Humanoid")
+                end
+                viewState.originalSubject = currentSubject
+            end
+            local ok = pcall(function() cam.CameraSubject = hum end)
+            if not ok then
+                toast("Cannot switch camera (locked)", C.Colors.Close)
+                if overrideOriginal then
+                    pcall(function() cam.CameraSubject = overrideOriginal end)
+                end
+                return false
             end
             viewState.active = true
             viewState.targetPlayer = player
             viewState.button = btn
-            cam.CameraSubject = hum
             setViewButtonState(btn, true)
             toast("Viewing " .. player.Name, C.Colors.Green)
 
             if viewState.monitorConn then
                 pcall(function() viewState.monitorConn:Disconnect() end)
+                viewState.monitorConn = nil
             end
             pcall(function()
                 viewState.monitorConn = RunService.Heartbeat:Connect(function()
@@ -2063,9 +2087,10 @@ local function main()
                     end
                 end)
             end)
+            return true
         end
 
-        -- ============ بطاقة التفاصيل ============
+        -- ============ Detail Card ============
         local selectedCard = nil
         local function showPlayerDetail(userInfo, isInServer)
             local wasViewing = viewState.active
@@ -2080,19 +2105,11 @@ local function main()
             viewState.active = false
             viewState.targetPlayer = nil
             viewState.button = nil
-            viewState.originalSubject = nil
 
-            -- لو كان يتابع ولا يزال الهدف بالسيرفر → احتفظ بالـ originalSubject
-            -- لو كان يتابع ولم يعد الهدف بالسيرفر → استعد الكاميرا فوراً
-            if wasViewing and not inServerPlayer then
-                if preservedSubject then
-                    local cam = workspace.CurrentCamera
-                    if cam then pcall(function() cam.CameraSubject = preservedSubject end) end
-                end
-                preservedSubject = nil
+            if selectedCard then
+                pcall(function() selectedCard:Destroy() end)
+                selectedCard = nil
             end
-
-            if selectedCard then selectedCard:Destroy(); selectedCard = nil end
 
             local card = new("Frame", {
                 Name = "DetailCard",
@@ -2165,8 +2182,8 @@ local function main()
                 LayoutOrder = 4
             }, card)
 
-            local presenceText = isInServer and "● In this server" or "○ Not in this server"
-            local presenceColor = isInServer and C.Colors.Green or C.Colors.TextDim
+            local presenceText = inServerPlayer and "● In this server" or "○ Not in this server"
+            local presenceColor = inServerPlayer and C.Colors.Green or C.Colors.TextDim
             new("TextLabel", {
                 Size = UDim2.new(1, 0, 0, 14),
                 BackgroundTransparency = 1,
@@ -2191,14 +2208,15 @@ local function main()
                 FillDirection = Enum.FillDirection.Horizontal
             }, btnGrid)
 
-            local function makeActionBtn(order, text, enabled, callback, tooltip)
+            -- ===== FIX: makeActionBtn always runs callback =====
+            local function makeActionBtn(order, text, isAvailable, callback)
                 local b = new("TextButton", {
-                    Size = UDim2.new(0, 0, 0, 32),
-                    BackgroundColor3 = enabled and C.Colors.AccentDeep or C.Colors.Surface,
-                    BackgroundTransparency = enabled and 0.2 or 0.5,
+                    Size = UDim2.new(0.5, -4, 0, 32),
+                    BackgroundColor3 = isAvailable and C.Colors.AccentDeep or C.Colors.Surface,
+                    BackgroundTransparency = isAvailable and 0.2 or 0.5,
                     BorderSizePixel = 0,
                     Text = text,
-                    TextColor3 = enabled and C.Colors.AccentGlow or C.Colors.TextDim,
+                    TextColor3 = isAvailable and C.Colors.AccentGlow or C.Colors.TextDim,
                     TextSize = 10,
                     Font = C.Fonts.Bold,
                     AutoButtonColor = false,
@@ -2206,14 +2224,10 @@ local function main()
                     ZIndex = 6
                 }, btnGrid)
                 createCorner(b, 7)
-                createStroke(b, enabled and C.Colors.AccentGlow or C.Colors.TextDim, 1, enabled and 0.3 or 0.7)
+                createStroke(b, isAvailable and C.Colors.AccentGlow or C.Colors.TextDim, 1, isAvailable and 0.3 or 0.7)
                 pcall(function()
                     b.MouseButton1Click:Connect(function()
-                        if enabled then
-                            callback()
-                        else
-                            toast(tooltip or "Not available", C.Colors.Yellow)
-                        end
+                        callback()
                     end)
                 end)
                 return b
@@ -2252,7 +2266,7 @@ local function main()
                 end)
             end)
 
-            -- ============ View Player (Toggle) — v1.2.5 ============
+            -- ===== VIEW PLAYER (Toggle) =====
             local viewBtn
             viewBtn = makeActionBtn(4, "VIEW PLAYER", inServerPlayer ~= nil, function()
                 local currentPlayer = Players:GetPlayerByUserId(userInfo.Id)
@@ -2264,12 +2278,14 @@ local function main()
                     stopViewing(true)
                 else
                     local keepSubj = viewState.originalSubject
-                    if viewState.active then stopViewing(false, true) end
+                    if viewState.active then
+                        stopViewing(false, true)
+                    end
                     startViewing(currentPlayer, viewBtn, keepSubj)
                 end
-            end, "Player not in this server — cannot spectate")
+            end)
 
-            -- ============ Go to Player (Instant Teleport) — v1.2.5 ============
+            -- ===== TELEPORT TO PLAYER (Instant) =====
             makeActionBtn(5, "TELEPORT TO PLAYER", inServerPlayer ~= nil, function()
                 local currentPlayer = Players:GetPlayerByUserId(userInfo.Id)
                 if not currentPlayer then
@@ -2294,7 +2310,6 @@ local function main()
                 end
                 local destPos = targetRoot.Position + Vector3.new(0, 3, 0)
                 local oldPos = myRoot.Position
-                -- Official instant teleport (no walking)
                 local ok = pcall(function()
                     myChar:PivotTo(CFrame.new(destPos))
                 end)
@@ -2308,7 +2323,6 @@ local function main()
                     return
                 end
                 toast("Teleported to " .. currentPlayer.Name, C.Colors.Green)
-                -- Verify server accepted (anti-cheat may snap back)
                 task.delay(0.5, function()
                     if myRoot and myRoot.Parent then
                         local moved = (myRoot.Position - oldPos).Magnitude
@@ -2317,17 +2331,33 @@ local function main()
                         end
                     end
                 end)
-            end, "Player not in this server")
+            end)
 
-            -- إذا كنا نشاهد سابقاً واخترنا لاعباً آخر في السيرفر → بدّل المشاهدة تلقائياً
+            -- Auto-switch view if we were viewing
             if wasViewing and inServerPlayer then
-                startViewing(inServerPlayer, viewBtn, preservedSubject)
+                local success = startViewing(inServerPlayer, viewBtn, preservedSubject)
+                if not success then
+                    if preservedSubject then
+                        local cam = workspace.CurrentCamera
+                        if cam then pcall(function() cam.CameraSubject = preservedSubject end) end
+                    else
+                        restoreCamera()
+                    end
+                end
+            elseif wasViewing and not inServerPlayer then
+                if preservedSubject then
+                    local cam = workspace.CurrentCamera
+                    if cam then pcall(function() cam.CameraSubject = preservedSubject end) end
+                else
+                    restoreCamera()
+                end
+                viewState.originalSubject = nil
             end
 
             selectedCard = card
         end
 
-        -- ============ بطاقة نتيجة البحث ============
+        -- ============ Result Card ============
         local function createResultCard(userInfo, order, isInServer)
             local card = new("Frame", {
                 Name = "ResultCard",
@@ -2399,7 +2429,8 @@ local function main()
             }, card)
             pcall(function()
                 clickBtn.MouseButton1Click:Connect(function()
-                    showPlayerDetail(userInfo, isInServer)
+                    local nowInServer = Players:GetPlayerByUserId(userInfo.Id) ~= nil
+                    showPlayerDetail(userInfo, nowInServer)
                 end)
             end)
 
@@ -2415,7 +2446,7 @@ local function main()
             return card
         end
 
-        -- ============ البحث الفوري ============
+        -- ============ Instant Search ============
         local searchDebounce = 0
         local lastQuery = ""
 
@@ -2506,12 +2537,10 @@ local function main()
             end)
         end)
 
-        -- =============================================================
-        -- صفحة الإعدادات
-        -- =============================================================
+        -- ============ SETTINGS PAGE ============
         local SettingsPage = makePage("SETTINGS")
         local SettingsScroll = makeScrollingPage(SettingsPage)
-        
+
         local ResetPosBtn = new("TextButton", {
             Size = UDim2.new(1, 0, 0, 44),
             BackgroundColor3 = C.Colors.Surface,
@@ -2526,7 +2555,7 @@ local function main()
         }, SettingsScroll)
         createCorner(ResetPosBtn, 10)
         createStroke(ResetPosBtn, C.Colors.Accent, 1, 0.4)
-        
+
         local AnimBtn = new("TextButton", {
             Size = UDim2.new(1, 0, 0, 44),
             BackgroundColor3 = C.Colors.Surface,
@@ -2574,12 +2603,10 @@ local function main()
             LayoutOrder = 3
         }, SettingsScroll)
 
-        -- =============================================================
-        -- صفحة حول
-        -- =============================================================
+        -- ============ ABOUT PAGE ============
         local AboutPage = makePage("ABOUT")
         local AboutScroll = makeScrollingPage(AboutPage)
-        
+
         local function makeAboutSection(order, title, body, height)
             local c = new("Frame", {
                 Size = UDim2.new(1, 0, 0, height),
@@ -2613,14 +2640,12 @@ local function main()
                 TextYAlignment = Enum.TextYAlignment.Top
             }, c)
         end
-        
-        makeAboutSection(1, "VIOLET HUB", "Version " .. SCRIPT_INFO.VERSION .. " — Premium Visual Effects. Developer: " .. SCRIPT_INFO.AUTHOR_ROBLOX, 64)
-        makeAboutSection(2, "FEATURES", "• Player & server info\n• Live FPS / Ping / Player count\n• 11 working PLAYER toggles\n• Instant Targeting search\n• View Player toggles ON/OFF\n• Instant Teleport to player\n• Copy profile / ID / refresh\n• Draggable, scrollable, animated", 158)
-        makeAboutSection(3, "LIMITATIONS", "View/Teleport only work for players in the same server. Teleport uses Character:PivotTo() — if the server blocks it, you'll see 'blocked by game'. Instant search is local-first; for non-members, exact username is required by Roblox API.", 92)
 
-        -- =============================================================
-        -- نظام التبويبات
-        -- =============================================================
+        makeAboutSection(1, "VIOLET HUB", "Version " .. SCRIPT_INFO.VERSION .. " — Premium Visual Effects. Developer: " .. SCRIPT_INFO.AUTHOR_ROBLOX, 64)
+        makeAboutSection(2, "FEATURES", "• Player & server info\n• Live FPS / Ping\n• 11 PLAYER toggles\n• Instant Targeting search\n• View toggle + Teleport\n• Copy / refresh / profile", 148)
+        makeAboutSection(3, "LIMITATIONS", "View/Teleport only work for players in the same server. Teleport uses Character:PivotTo() — some anti-cheats reject it (shows 'blocked'). Instant search is local-first.", 80)
+
+        -- ============ TABS ============
         local TABS = {
             {name = "HOME", label = "H"},
             {name = "PLAYER", label = "P"},
@@ -2628,7 +2653,7 @@ local function main()
             {name = "SETTINGS", label = "S"},
             {name = "ABOUT", label = "i"}
         }
-        
+
         local TabRefs = {}
         for i, t in ipairs(TABS) do
             local b = new("TextButton", {
@@ -2680,7 +2705,7 @@ local function main()
             tween(r.icon, 0.2, {TextColor3 = isActive and C.Colors.AccentGlow or C.Colors.TextSecond})
             tween(r.label, 0.2, {TextColor3 = isActive and C.Colors.Text or C.Colors.TextSecond})
         end
-        
+
         local function moveIndicator(name, instant)
             local r = TabRefs[name]
             if not r then return end
@@ -2693,11 +2718,10 @@ local function main()
                 end
             end)
         end
-        
+
         local function switchTab(name)
             if not Pages[name] then return end
             if CurrentPage == name then return end
-            -- v1.2.5: أوقف المشاهدة عند مغادرة TARGETING
             if CurrentPage == "TARGETING" and name ~= "TARGETING" then
                 pcall(function() stopViewing(false) end)
             end
@@ -2778,7 +2802,6 @@ local function main()
                 if afterFn then pcall(afterFn) end
                 return
             end
-            -- v1.2.5: أوقف المشاهدة عند إخفاء الهب
             pcall(function() stopViewing(false) end)
             closing = true
             hubVisible = false
@@ -2807,7 +2830,7 @@ local function main()
         end
 
         local dragging, dragStart, startPos, activeDragInput = false, nil, nil, nil
-        
+
         local function clampPosition(pos)
             local v = getViewportSize()
             local s = Hub.AbsoluteSize
@@ -2817,7 +2840,7 @@ local function main()
             y = math.clamp(y, 0, math.max(0, v.Y - s.Y))
             return UDim2.fromOffset(x, y)
         end
-        
+
         pcall(function()
             TitleBar.InputBegan:Connect(function(input)
                 if opening or closing then return end
@@ -2907,7 +2930,7 @@ local function main()
                 if not SG.Parent then running = false end
             end)
         end)
-        
+
         task.spawn(function()
             while running and SG and SG.Parent do
                 pcall(function()
@@ -2926,7 +2949,7 @@ local function main()
                 task.wait(1)
             end
         end)
-        
+
         task.spawn(function()
             while running and SG and SG.Parent do
                 pcall(function()
@@ -2935,7 +2958,7 @@ local function main()
                 task.wait(3)
             end
         end)
-        
+
         task.spawn(function()
             while running and SG and SG.Parent do
                 pcall(function()
@@ -2955,7 +2978,7 @@ local function main()
                 savedPosition = tg
             end)
         end)
-        
+
         local animBusy = false
         pcall(function()
             AnimBtn.MouseButton1Click:Connect(function()
@@ -3015,7 +3038,7 @@ local function main()
             end)
         end
         updateGrids()
-        
+
         local function updateResponsive(resizeHub)
             local isMob = isMobileScreen()
             local newSidebarW = isMob and 48 or 110
@@ -3034,7 +3057,7 @@ local function main()
                 task.defer(function() if CurrentPage then moveIndicator(CurrentPage, true) end end)
             end
         end
-        
+
         pcall(function()
             workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
                 updateResponsive(true)
