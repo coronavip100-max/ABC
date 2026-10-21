@@ -1,18 +1,20 @@
 --!nonstrict
 --==================================================================
---  ✦ LYNEX HUB v2.3 ✦
---  Home (scrolling) • News • Settings  |  Mobile  |  Purple
+--  ✦ LYNEX HUB v2.5 ✦
+--  Home • Players • News • Settings  |  Blur  |  Mobile  |  Purple
+--  + Spectate System (Roblox Camera)
 --==================================================================
 
 local Players          = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TweenService     = game:GetService("TweenService")
+local Lighting         = game:GetService("Lighting")
 
 local localPlayer = Players.LocalPlayer
 local playerGui   = localPlayer:WaitForChild("PlayerGui")
 
 --==================================================================
--- 0) الحالة
+-- 0) الحالة + forward declarations
 --==================================================================
 local settings = {
     animations   = true,
@@ -20,6 +22,8 @@ local settings = {
     glow         = true,
 }
 local windowHidden = false
+local screenGui    -- forward declaration
+local blurObj      -- forward declaration
 
 --==================================================================
 -- 1) الجذر
@@ -114,9 +118,10 @@ local EASE = {
 }
 
 --==================================================================
--- 3.1) Toast (مبكر لاستخدامه في Home)
+-- 3.1) Toast / Copy / OpenURL
 --==================================================================
 local function showToast(message)
+    local parentGui = screenGui or playerGui
     local toast = create("Frame", {
         Name = "Toast",
         Size = UDim2.fromOffset(240, 40),
@@ -125,7 +130,7 @@ local function showToast(message)
         BackgroundTransparency = 1,
         BorderSizePixel = 0,
         ZIndex = 100,
-    }, screenGui or playerGui)
+    }, parentGui)
     addCorner(12, toast)
     local toastStroke = addStroke(THEME.P_BRIGHT, 1, 1, toast)
     local label = create("TextLabel", {
@@ -161,17 +166,15 @@ local function showToast(message)
 end
 
 local function copyText(text, label)
-    local ok = false
     if typeof(setclipboard) == "function" then
-        local success = pcall(setclipboard, text)
-        ok = success
+        local ok = pcall(setclipboard, text)
+        if ok then
+            showToast("✦ " .. (label or "Copied"))
+            return true
+        end
     end
-    if ok then
-        showToast("✦ " .. (label or "Copied"))
-    else
-        showToast("✦ " .. text)
-    end
-    return ok
+    showToast("✦ " .. text)
+    return false
 end
 
 local function openURL(url)
@@ -193,7 +196,37 @@ local function openURL(url)
 end
 
 --==================================================================
--- 4) تنظيف النسخة السابقة
+-- 3.2) إدارة Blur
+--==================================================================
+local BLUR_SIZE = 20
+
+local function applyBlur()
+    if blurObj and blurObj.Parent then return end
+    local ok = pcall(function()
+        local existing = Lighting:FindFirstChild("LYNEX_HUB_Blur")
+        if existing and existing:IsA("BlurEffect") then
+            existing.Size = BLUR_SIZE
+            blurObj = existing
+            return
+        end
+        local b = Instance.new("BlurEffect")
+        b.Name = "LYNEX_HUB_Blur"
+        b.Size = BLUR_SIZE
+        b.Parent = Lighting
+        blurObj = b
+    end)
+    if not ok then blurObj = nil end
+end
+
+local function removeBlur()
+    if blurObj and blurObj.Parent then
+        pcall(function() blurObj:Destroy() end)
+    end
+    blurObj = nil
+end
+
+--==================================================================
+-- 4) تنظيف النسخة السابقة + blur قديم
 --==================================================================
 local guiParent = resolveGuiParent()
 for _, p in ipairs({ guiParent, playerGui }) do
@@ -202,9 +235,13 @@ for _, p in ipairs({ guiParent, playerGui }) do
         if old then old:Destroy() end
     end
 end
+do
+    local oldBlur = Lighting:FindFirstChild("LYNEX_HUB_Blur")
+    if oldBlur then oldBlur:Destroy() end
+end
 
 --==================================================================
--- 5) قياسات متجاوبة
+-- 5) قياسات
 --==================================================================
 local function getViewport()
     local cam = workspace.CurrentCamera
@@ -226,7 +263,7 @@ end
 --==================================================================
 -- 6) ScreenGui + Root
 --==================================================================
-local screenGui = create("ScreenGui", {
+screenGui = create("ScreenGui", {
     Name = "LYNEX_HUB",
     ResetOnSpawn = false,
     IgnoreGuiInset = true,
@@ -234,10 +271,8 @@ local screenGui = create("ScreenGui", {
     DisplayOrder = 999,
 }, guiParent)
 
--- إعادة ربط Toast بـ screenGui الحقيقي
-do
-    local oldToast = playerGui:FindFirstChild("LYNEX_HUB")
-    if oldToast and oldToast ~= screenGui then oldToast:Destroy() end
+if screenGui.Destroying then
+    screenGui.Destroying:Connect(removeBlur)
 end
 
 local winW, winH = computeWindowSize()
@@ -405,6 +440,7 @@ local pagesContainer = create("Frame", {
 --==================================================================
 local TABS = {
     { id = "home",     name = "Home",     icon = "⌂" },
+    { id = "players",  name = "Players",  icon = "◉" },
     { id = "news",     name = "News",     icon = "✉" },
     { id = "settings", name = "Settings", icon = "⚙" },
 }
@@ -416,7 +452,7 @@ local currentTab = nil
 local function createTabButton(tab, order)
     local btn = create("TextButton", {
         Name = tab.id .. "Tab",
-        Size = UDim2.new(1, 0, 0, 34),
+        Size = UDim2.new(1, 0, 0, 32),
         BackgroundColor3 = THEME.BG_CARD,
         AutoButtonColor = false,
         Text = "",
@@ -451,7 +487,7 @@ local function createTabButton(tab, order)
         Position = UDim2.new(0, 32, 0, 0),
         BackgroundTransparency = 1,
         Text = tab.name,
-        Font = FONT.Medium, TextSize = 12,
+        Font = FONT.Medium, TextSize = 11,
         TextColor3 = THEME.TX_MAIN,
         TextXAlignment = Enum.TextXAlignment.Left,
         TextTruncate = Enum.TextTruncate.AtEnd,
@@ -467,7 +503,7 @@ for i, tab in ipairs(TABS) do
 end
 
 --==================================================================
--- 11) إنشاء الصفحات (home تصبح ScrollingFrame)
+-- 11) إنشاء الصفحات
 --==================================================================
 local function createPage(id, scrolling)
     local class = scrolling and "ScrollingFrame" or "Frame"
@@ -492,7 +528,7 @@ local function createPage(id, scrolling)
 end
 
 --==================================================================
--- 12) صفحة Home — ScrollingFrame + UIListLayout
+-- 12) صفحة Home
 --==================================================================
 local homePage = createPage("home", true)
 create("UIListLayout", {
@@ -505,7 +541,6 @@ create("UIPadding", {
     PaddingRight = UDim.new(0, 6),
 }, homePage)
 
--- ── Hero ─────────────────────────────────────────────────────
 local hero = create("Frame", {
     Name = "Hero",
     Size = UDim2.new(1, 0, 0, 68),
@@ -545,7 +580,6 @@ create("TextLabel", {
     ZIndex = 5,
 }, hero)
 
--- ── Profile Card ─────────────────────────────────────────────
 local profileCard = create("Frame", {
     Name = "ProfileCard",
     Size = UDim2.new(1, 0, 0, 90),
@@ -635,7 +669,6 @@ end
 local uidLbl = smallInfo(infoX, 95, "#", "—")
 local ageLbl = smallInfo(infoX + 100, 95, "◷", "—")
 
--- ── Developer Info Card ──────────────────────────────────────
 local devCard = create("Frame", {
     Name = "DevCard",
     Size = UDim2.new(1, 0, 0, 100),
@@ -659,7 +692,6 @@ create("TextLabel", {
     ZIndex = 5,
 }, devCard)
 
--- صف قابل للنسخ (Roblox / Discord)
 local function makeCopyRow(parent, order, iconText, prefix, valueText, copyPayload, copyLabel)
     local row = create("TextButton", {
         Size = UDim2.new(1, -20, 0, 28),
@@ -721,7 +753,6 @@ local function makeCopyRow(parent, order, iconText, prefix, valueText, copyPaylo
         copyText(copyPayload, copyLabel)
     end)
 
-    -- تحويم بسيط (فقط على الكمبيوتر)
     row.MouseEnter:Connect(function()
         tween(row, TweenInfo.new(0.15), { BackgroundTransparency = 0.3 })
     end)
@@ -732,10 +763,9 @@ local function makeCopyRow(parent, order, iconText, prefix, valueText, copyPaylo
     return row
 end
 
-makeCopyRow(devCard, 0, "◆", "Roblox",  "hamza000599",  "hamza000599",  "Roblox username copied")
-makeCopyRow(devCard, 1, "◈", "Discord", "hamza.abc0",    "hamza.abc0",    "Discord username copied")
+makeCopyRow(devCard, 0, "◆", "Roblox",  "hamza000599", "hamza000599", "Roblox username copied")
+makeCopyRow(devCard, 1, "◈", "Discord", "hamza.abc0",   "hamza.abc0",   "Discord username copied")
 
--- ── Script Information Card ─────────────────────────────────
 local SCRIPT_INFO = {
     { icon = "✦", label = "Script Name",     value = "LYNEX HUB" },
     { icon = "◆", label = "Version",         value = "V1.0.0" },
@@ -818,7 +848,6 @@ for i, info in ipairs(SCRIPT_INFO) do
     makeInfoRow(scriptCard, i - 1, info.icon, info.label, info.value)
 end
 
--- ── Join Our Discord ────────────────────────────────────────
 local DISCORD_URL = "https://discord.gg/xzNRnKyVd"
 
 local discordBtn = create("TextButton", {
@@ -849,12 +878,10 @@ create("TextLabel", {
     ZIndex = 5,
 }, discordBtn)
 
--- نقرة: فتح الرابط
 discordBtn.MouseButton1Click:Connect(function()
     openURL(DISCORD_URL)
 end)
 
--- تحويم على الكمبيوتر
 if UserInputService.MouseEnabled then
     discordBtn.MouseEnter:Connect(function()
         tween(discordStroke, TweenInfo.new(0.18), { Transparency = 0.1 })
@@ -864,10 +891,513 @@ if UserInputService.MouseEnabled then
     end)
 end
 
--- ================== نهاية صفحة Home =========================
+--==================================================================
+-- 13.5) Spectate System  ◀️ جديد
+--==================================================================
+local spectate = {
+    active      = false,
+    target      = nil,
+    connections = {},
+}
+local spectateButtons = {}  -- [player] = { btn, stroke }
+
+-- ── مؤشر عائم أسفل الشاشة ──
+local spectateIndicator = create("Frame", {
+    Name = "SpectateIndicator",
+    Size = UDim2.fromOffset(240, 34),
+    Position = UDim2.new(0.5, -120, 1, -48),
+    BackgroundColor3 = THEME.BG_CARD,
+    BackgroundTransparency = 0.05,
+    BorderSizePixel = 0,
+    Visible = false,
+    ZIndex = 100,
+}, screenGui)
+addCorner(17, spectateIndicator)
+addStroke(THEME.P_BRIGHT, 1.5, 0.2, spectateIndicator)
+
+local spectateIndicatorLabel = create("TextLabel", {
+    Size = UDim2.fromScale(1, 1),
+    BackgroundTransparency = 1,
+    Text = "◉  Spectating",
+    Font = FONT.Bold, TextSize = 12,
+    TextColor3 = THEME.TX_MAIN,
+    TextXAlignment = Enum.TextXAlignment.Center,
+    ZIndex = 101,
+}, spectateIndicator)
+
+local function updateSpectateIndicator()
+    if spectate.active and spectate.target and spectate.target.Parent then
+        local disp = spectate.target.DisplayName
+        if disp == "" or disp == nil then disp = spectate.target.Name end
+        spectateIndicatorLabel.Text = "◉  Spectating: " .. disp
+        if not spectateIndicator.Visible then
+            spectateIndicator.Visible = true
+            spectateIndicator.BackgroundTransparency = 1
+            spectateIndicatorLabel.TextTransparency = 1
+            tween(spectateIndicator, TweenInfo.new(0.22), { BackgroundTransparency = 0.05 })
+            tween(spectateIndicatorLabel, TweenInfo.new(0.22), { TextTransparency = 0 })
+        end
+    else
+        if spectateIndicator.Visible then
+            tween(spectateIndicator, TweenInfo.new(0.18), { BackgroundTransparency = 1 })
+            tween(spectateIndicatorLabel, TweenInfo.new(0.18), { TextTransparency = 1 })
+            task.delay(0.2, function()
+                if not spectate.active then
+                    spectateIndicator.Visible = false
+                end
+            end)
+        end
+    end
+end
+
+local function getCharacterHumanoid(player)
+    if not player then return nil end
+    local char = player.Character
+    if not char then return nil end
+    return char:FindFirstChildOfClass("Humanoid")
+end
+
+local function clearSpectateConnections()
+    for _, conn in ipairs(spectate.connections) do
+        pcall(function() conn:Disconnect() end)
+    end
+    spectate.connections = {}
+end
+
+local function refreshSpectateButtons()
+    local target = spectate.active and spectate.target or nil
+    for player, refs in pairs(spectateButtons) do
+        if refs.btn and refs.btn.Parent then
+            local isTarget = (player == target)
+            refs.btn.Text = isTarget and "◉  Stop Spectating" or "◉  Spectate"
+            tween(refs.btn, TweenInfo.new(0.2), {
+                BackgroundColor3 = isTarget and THEME.DANGER or THEME.P_MAIN,
+            })
+            if refs.stroke then
+                tween(refs.stroke, TweenInfo.new(0.2), {
+                    Color = isTarget and THEME.DANGER_HI or THEME.P_GLOW,
+                })
+            end
+        end
+    end
+end
+
+local function stopSpectating(silent)
+    if not spectate.active then return end
+    spectate.active = false
+    spectate.target = nil
+
+    clearSpectateConnections()
+
+    local camera = workspace.CurrentCamera
+    if camera then
+        local hum = getCharacterHumanoid(localPlayer)
+        if hum then
+            camera.CameraSubject = hum
+        else
+            localPlayer.CharacterAdded:Once(function(char)
+                task.wait(0.15)
+                if spectate.active then return end
+                local newHum = char:FindFirstChildOfClass("Humanoid")
+                if newHum and workspace.CurrentCamera then
+                    workspace.CurrentCamera.CameraSubject = newHum
+                end
+            end)
+        end
+    end
+
+    updateSpectateIndicator()
+    refreshSpectateButtons()
+
+    if not silent then
+        showToast("◉  Spectate stopped")
+    end
+end
+
+local function startSpectating(targetPlayer)
+    if not targetPlayer or not targetPlayer.Parent then
+        showToast("◉  Player unavailable")
+        return
+    end
+    if targetPlayer == localPlayer then
+        showToast("◉  Cannot spectate yourself")
+        return
+    end
+
+    if spectate.active and spectate.target == targetPlayer then
+        stopSpectating()
+        return
+    end
+
+    if spectate.active then
+        stopSpectating(true)
+    end
+
+    local targetHum = getCharacterHumanoid(targetPlayer)
+    if not targetHum or targetHum.Health <= 0 then
+        showToast("◉  Target has no active character")
+        return
+    end
+
+    local camera = workspace.CurrentCamera
+    if not camera then
+        showToast("◉  Camera unavailable")
+        return
+    end
+
+    spectate.active = true
+    spectate.target = targetPlayer
+    camera.CameraSubject = targetHum
+
+    table.insert(spectate.connections, targetPlayer.CharacterAdded:Connect(function()
+        task.wait(0.15)
+        if not spectate.active or spectate.target ~= targetPlayer then return end
+        local hum = getCharacterHumanoid(targetPlayer)
+        if hum and workspace.CurrentCamera then
+            workspace.CurrentCamera.CameraSubject = hum
+        end
+    end))
+
+    table.insert(spectate.connections, Players.PlayerRemoving:Connect(function(p)
+        if spectate.active and spectate.target == p then
+            stopSpectating()
+        end
+    end))
+
+    table.insert(spectate.connections, localPlayer.CharacterAdded:Connect(function()
+        task.wait(0.15)
+        if not spectate.active or not spectate.target then return end
+        local hum = getCharacterHumanoid(spectate.target)
+        if hum and workspace.CurrentCamera then
+            workspace.CurrentCamera.CameraSubject = hum
+        end
+    end))
+
+    updateSpectateIndicator()
+    refreshSpectateButtons()
+
+    local disp = targetPlayer.DisplayName
+    if disp == "" or disp == nil then disp = targetPlayer.Name end
+    showToast("◉  Spectating " .. disp)
+end
 
 --==================================================================
--- 13) صفحة News
+-- 13) صفحة Players  ◀️ مع Spectate
+--==================================================================
+local playersPage = createPage("players")
+
+local searchContainer = create("Frame", {
+    Name = "SearchContainer",
+    Size = UDim2.new(1, 0, 0, 42),
+    BackgroundColor3 = THEME.BG_CARD,
+    BackgroundTransparency = 0.05,
+    BorderSizePixel = 0,
+    ZIndex = 4,
+}, playersPage)
+addCorner(10, searchContainer)
+addStroke(THEME.BORDER, 1, 0.2, searchContainer)
+
+create("TextLabel", {
+    Size = UDim2.fromOffset(20, 42),
+    Position = UDim2.new(0, 8, 0, 0),
+    BackgroundTransparency = 1,
+    Text = "⌕",
+    Font = FONT.Bold, TextSize = 16,
+    TextColor3 = THEME.P_GLOW,
+    ZIndex = 5,
+}, searchContainer)
+
+local searchBox = create("TextBox", {
+    Name = "SearchBox",
+    Size = UDim2.new(1, -72, 1, 0),
+    Position = UDim2.new(0, 30, 0, 0),
+    BackgroundTransparency = 1,
+    Text = "",
+    PlaceholderText = "Search username or display name…",
+    PlaceholderColor3 = THEME.TX_SUBTLE,
+    Font = FONT.Medium, TextSize = 12,
+    TextColor3 = THEME.TX_MAIN,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    ClearTextOnFocus = false,
+    MultiLine = false,
+    TextEditable = true,
+    ZIndex = 5,
+}, searchContainer)
+
+local clearBtn = create("TextButton", {
+    Size = UDim2.fromOffset(30, 30),
+    Position = UDim2.new(1, -36, 0.5, -15),
+    BackgroundColor3 = THEME.BG_CARD_HI,
+    AutoButtonColor = false,
+    Text = "✕",
+    Font = FONT.Bold, TextSize = 11,
+    TextColor3 = THEME.P_GLOW,
+    Visible = false,
+    ZIndex = 5,
+}, searchContainer)
+addCorner(6, clearBtn)
+
+local playersList = create("ScrollingFrame", {
+    Name = "PlayersList",
+    Size = UDim2.new(1, 0, 1, -50),
+    Position = UDim2.new(0, 0, 0, 50),
+    BackgroundTransparency = 1,
+    BorderSizePixel = 0,
+    ScrollBarThickness = 3,
+    ScrollBarImageColor3 = THEME.P_BRIGHT,
+    CanvasSize = UDim2.new(0, 0, 0, 0),
+    AutomaticCanvasSize = Enum.AutomaticSize.Y,
+    ScrollingDirection = Enum.ScrollingDirection.Y,
+    ZIndex = 4,
+}, playersPage)
+create("UIListLayout", {
+    Padding = UDim.new(0, 8),
+    SortOrder = Enum.SortOrder.LayoutOrder,
+}, playersList)
+create("UIPadding", {
+    PaddingRight = UDim.new(0, 4),
+    PaddingBottom = UDim.new(0, 6),
+}, playersList)
+
+-- بناء بطاقة لاعب (مع Spectate)
+local function buildPlayerCard(player, order)
+    local isSpectating = (spectate.active and spectate.target == player)
+
+    local card = create("Frame", {
+        Name = "P_" .. player.UserId,
+        Size = UDim2.new(1, 0, 0, 122),
+        BackgroundColor3 = THEME.BG_CARD,
+        BackgroundTransparency = 0.05,
+        BorderSizePixel = 0,
+        LayoutOrder = order,
+        ZIndex = 5,
+    }, playersList)
+    addCorner(10, card)
+    addStroke(THEME.BORDER, 1, 0.2, card)
+
+    local avFrame = create("Frame", {
+        Size = UDim2.fromOffset(56, 56),
+        Position = UDim2.new(0, 10, 0, 10),
+        BackgroundColor3 = THEME.BG_CARD_HI,
+        BorderSizePixel = 0,
+        ClipsDescendants = true,
+        ZIndex = 6,
+    }, card)
+    addCorner(28, avFrame)
+    addStroke(THEME.P_BRIGHT, 1.5, 0.2, avFrame)
+
+    local img = create("ImageLabel", {
+        Size = UDim2.fromScale(1, 1),
+        BackgroundTransparency = 1,
+        Image = "",
+        ScaleType = Enum.ScaleType.Crop,
+        ZIndex = 7,
+    }, avFrame)
+    pcall(function()
+        img.Image = string.format(
+            "rbxthumb://type=AvatarHeadShot&id=%d&w=150&h=150",
+            player.UserId
+        )
+    end)
+
+    local iX = 76
+
+    create("TextLabel", {
+        Size = UDim2.new(1, -iX - 8, 0, 18),
+        Position = UDim2.new(0, iX, 0, 10),
+        BackgroundTransparency = 1,
+        Text = (player.DisplayName ~= "" and player.DisplayName) or player.Name,
+        Font = FONT.Bold, TextSize = 13,
+        TextColor3 = THEME.TX_MAIN,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextTruncate = Enum.TextTruncate.AtEnd,
+        ZIndex = 6,
+    }, card)
+
+    create("TextLabel", {
+        Size = UDim2.new(1, -iX - 8, 0, 14),
+        Position = UDim2.new(0, iX, 0, 28),
+        BackgroundTransparency = 1,
+        Text = "@" .. player.Name,
+        Font = FONT.Regular, TextSize = 11,
+        TextColor3 = THEME.TX_DIM,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextTruncate = Enum.TextTruncate.AtEnd,
+        ZIndex = 6,
+    }, card)
+
+    local okAge, accountAge = pcall(function() return player.AccountAge end)
+    local ageText = (okAge and typeof(accountAge) == "number")
+        and (tostring(accountAge) .. " days") or "N/A"
+
+    create("TextLabel", {
+        Size = UDim2.new(0, 100, 0, 14),
+        Position = UDim2.new(0, iX, 0, 46),
+        BackgroundTransparency = 1,
+        Text = "# " .. tostring(player.UserId),
+        Font = FONT.Medium, TextSize = 10,
+        TextColor3 = THEME.TX_SUBTLE,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 6,
+    }, card)
+
+    create("TextLabel", {
+        Size = UDim2.new(1, -iX - 8, 0, 14),
+        Position = UDim2.new(0, iX, 0, 46),
+        BackgroundTransparency = 1,
+        Text = "◷  " .. ageText,
+        Font = FONT.Medium, TextSize = 10,
+        TextColor3 = THEME.TX_SUBTLE,
+        TextXAlignment = Enum.TextXAlignment.Right,
+        ZIndex = 6,
+    }, card)
+
+    -- زر Spectate
+    local specBtn = create("TextButton", {
+        Name = "SpectateBtn",
+        Size = UDim2.new(1, -20, 0, 28),
+        Position = UDim2.new(0, 10, 1, -38),
+        BackgroundColor3 = isSpectating and THEME.DANGER or THEME.P_MAIN,
+        BackgroundTransparency = 0.05,
+        AutoButtonColor = false,
+        Text = isSpectating and "◉  Stop Spectating" or "◉  Spectate",
+        Font = FONT.Bold, TextSize = 11,
+        TextColor3 = THEME.TX_MAIN,
+        ZIndex = 7,
+    }, card)
+    addCorner(8, specBtn)
+    local specStroke = addStroke(
+        isSpectating and THEME.DANGER_HI or THEME.P_GLOW,
+        1.2, 0.25, specBtn
+    )
+
+    spectateButtons[player] = { btn = specBtn, stroke = specStroke }
+
+    specBtn.Destroying:Connect(function()
+        if spectateButtons[player] and spectateButtons[player].btn == specBtn then
+            spectateButtons[player] = nil
+        end
+    end)
+
+    local baseSize = specBtn.Size
+    local pressing = false
+    local function scaleTo(f, dur)
+        tween(specBtn, TweenInfo.new(dur), {
+            Size = UDim2.new(
+                baseSize.X.Scale * f, baseSize.X.Offset * f,
+                baseSize.Y.Scale * f, baseSize.Y.Offset * f
+            )
+        })
+    end
+    specBtn.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+           or input.UserInputType == Enum.UserInputType.Touch then
+            pressing = true
+            scaleTo(0.94, 0.08)
+        end
+    end)
+    specBtn.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+           or input.UserInputType == Enum.UserInputType.Touch then
+            if pressing then
+                pressing = false
+                scaleTo(1, 0.14)
+            end
+        end
+    end)
+
+    if UserInputService.MouseEnabled then
+        specBtn.MouseEnter:Connect(function()
+            tween(specStroke, TweenInfo.new(0.15), { Transparency = 0.05 })
+        end)
+        specBtn.MouseLeave:Connect(function()
+            tween(specStroke, TweenInfo.new(0.15), { Transparency = 0.25 })
+        end)
+    end
+
+    specBtn.MouseButton1Click:Connect(function()
+        if spectate.active and spectate.target == player then
+            stopSpectating()
+        else
+            startSpectating(player)
+        end
+    end)
+
+    return card
+end
+
+local function renderPlayers(filter)
+    for _, child in ipairs(playersList:GetChildren()) do
+        if child:IsA("Frame") or child:IsA("TextLabel") then
+            child:Destroy()
+        end
+    end
+
+    filter = tostring(filter or ""):lower()
+    filter = filter:gsub("^%s+", ""):gsub("%s+$", "")
+
+    local list = Players:GetPlayers()
+    table.sort(list, function(a, b)
+        return a.Name:lower() < b.Name:lower()
+    end)
+
+    local order = 0
+    for _, p in ipairs(list) do
+        local matches = filter == ""
+            or p.Name:lower():find(filter, 1, true) ~= nil
+            or p.DisplayName:lower():find(filter, 1, true) ~= nil
+
+        if matches then
+            order += 1
+            buildPlayerCard(p, order)
+        end
+    end
+
+    if order == 0 then
+        create("TextLabel", {
+            Size = UDim2.new(1, 0, 0, 60),
+            BackgroundTransparency = 1,
+            Text = "◌  No players match your search",
+            Font = FONT.Medium, TextSize = 12,
+            TextColor3 = THEME.TX_SUBTLE,
+            TextXAlignment = Enum.TextXAlignment.Center,
+            TextYAlignment = Enum.TextYAlignment.Center,
+            LayoutOrder = 0,
+            ZIndex = 5,
+        }, playersList)
+    end
+end
+
+local searchThread = nil
+searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+    clearBtn.Visible = searchBox.Text ~= ""
+    if searchThread then pcall(task.cancel, searchThread) end
+    searchThread = task.delay(0.08, function()
+        searchThread = nil
+        renderPlayers(searchBox.Text)
+    end)
+end)
+
+clearBtn.MouseButton1Click:Connect(function()
+    searchBox.Text = ""
+    renderPlayers("")
+end)
+
+Players.PlayerAdded:Connect(function()
+    if currentTab == "players" then
+        task.wait(0.1)
+        renderPlayers(searchBox.Text)
+    end
+end)
+
+Players.PlayerRemoving:Connect(function()
+    if currentTab == "players" then
+        renderPlayers(searchBox.Text)
+    end
+end)
+
+--==================================================================
+-- 14) صفحة News
 --==================================================================
 local newsPage = createPage("news")
 
@@ -907,7 +1437,8 @@ local NEWS_DATA = {
     { title = "Mobile Optimization",   body = "Touch-friendly controls, responsive layout, and smooth animations tuned for phones of all sizes.",          date = "2025-01-20" },
     { title = "Player Profile Card",   body = "Home tab now displays your real Roblox avatar, display name, user id and account age.",                 date = "2025-01-24" },
     { title = "Settings & Customization", body = "You can now toggle animations, adjust window transparency, and enable or disable the purple glow.", date = "2025-01-26" },
-    { title = "Developer & Script Info", body = "Home now shows Developer Info, Script Information, and a quick link to our Discord community.",      date = "2025-01-28" },
+    { title = "Players Tab & Blur",     body = "New Players tab with live search and player cards. A subtle blur effect now enhances the UI focus.",       date = "2025-02-01" },
+    { title = "Spectate System",        body = "New Spectate feature on Players tab lets you watch any player using the Roblox camera in real time.",          date = "2025-02-08" },
 }
 
 local newsCards = {}
@@ -973,7 +1504,7 @@ for i, item in ipairs(NEWS_DATA) do
 end
 
 --==================================================================
--- 14) صفحة Settings
+-- 15) صفحة Settings
 --==================================================================
 local settingsPage = createPage("settings")
 
@@ -1209,7 +1740,7 @@ addCorner(10, resetBtn)
 addStroke(THEME.DANGER, 1.2, 0.15, resetBtn)
 
 --==================================================================
--- 15) الزر العائم
+-- 16) الزر العائم
 --==================================================================
 local floatingBtn = create("TextButton", {
     Name = "FloatingBtn",
@@ -1233,7 +1764,7 @@ addGradient(floatingBtn, {
 }, 45)
 
 --==================================================================
--- 16) التلاشي
+-- 17) التلاشي
 --==================================================================
 local origTransparency = {}
 local function scanTransparency(obj)
@@ -1249,6 +1780,9 @@ local function scanTransparency(obj)
         end
         if obj:IsA("ImageLabel") or obj:IsA("ImageButton") then
             snap.ImageTransparency = obj.ImageTransparency
+        end
+        if obj:IsA("TextBox") then
+            snap.TextTransparency = obj.TextTransparency
         end
         if next(snap) then origTransparency[obj] = snap end
     end
@@ -1298,7 +1832,7 @@ local function fadeTo(value, duration, style, direction, onDone)
 end
 
 --==================================================================
--- 17) نبض التوهج
+-- 18) نبض التوهج
 --==================================================================
 task.spawn(function()
     while screenGui and screenGui.Parent do
@@ -1319,7 +1853,7 @@ task.spawn(function()
 end)
 
 --==================================================================
--- 18) تأثيرات الضغط والتحويم
+-- 19) Press & Hover
 --==================================================================
 local function attachPressEffect(btn)
     local baseSize = btn.Size
@@ -1371,10 +1905,11 @@ if UserInputService.MouseEnabled then
     attachHover(closeBtn, THEME.DANGER)
     attachHover(floatingBtn, THEME.P_BRIGHT)
     attachHover(resetBtn, Color3.fromRGB(48, 20, 36))
+    attachHover(clearBtn, THEME.P_MAIN)
 end
 
 --==================================================================
--- 19) سحب النافذة
+-- 20) سحب النافذة
 --==================================================================
 local dragging, dragStart, startPos = false, nil, nil
 header.InputBegan:Connect(function(input)
@@ -1405,7 +1940,7 @@ UserInputService.InputChanged:Connect(function(input)
 end)
 
 --==================================================================
--- 20) فتح/طي القائمة الجانبية — تبدأ مفتوحة
+-- 21) فتح/طي القائمة الجانبية
 --==================================================================
 local sidebarOpen = true
 sidebar.Size     = UDim2.new(0, sidebarW, 1, 0)
@@ -1428,7 +1963,7 @@ menuBtn.MouseButton1Click:Connect(function()
 end)
 
 --==================================================================
--- 21) نظام التبويبات
+-- 22) نظام التبويبات
 --==================================================================
 local pageTweens = {}
 local pageOrigPos = {}
@@ -1498,6 +2033,7 @@ local function switchTab(id)
     if page then
         animatePageIn(page, id)
         if id == "news" then animateNewsCards() end
+        if id == "players" then renderPlayers(searchBox.Text) end
     end
 end
 
@@ -1506,10 +2042,12 @@ for id, data in pairs(tabButtons) do
 end
 
 --==================================================================
--- 22) الإظهار / الإخفاء
+-- 23) الإظهار / الإخفاء (مع Blur + إيقاف Spectate)
 --==================================================================
 local function hideWindow()
+    stopSpectating(true)     -- ◀️ جديد
     windowHidden = true
+    removeBlur()
     tween(outerGlow, TweenInfo.new(0.25), { BackgroundTransparency = 1 })
     mainStroke.Enabled = false
     fadeTo(1, 0.28, Enum.EasingStyle.Quad, Enum.EasingDirection.In, function()
@@ -1524,6 +2062,7 @@ local function showWindow()
     windowHidden = false
     floatingBtn.Visible = false
     root.Visible = true
+    applyBlur()
     setAllTransparency(1)
     fadeTo("orig", 0.32, Enum.EasingStyle.Quad, Enum.EasingDirection.Out, function()
         mainStroke.Enabled = true
@@ -1537,7 +2076,7 @@ closeBtn.MouseButton1Click:Connect(hideWindow)
 floatingBtn.MouseButton1Click:Connect(showWindow)
 
 --==================================================================
--- 23) تحميل بيانات اللاعب الحقيقية
+-- 24) تحميل بيانات اللاعب
 --==================================================================
 local function loadPlayerProfile()
     pcall(function()
@@ -1566,7 +2105,7 @@ end
 loadPlayerProfile()
 
 --==================================================================
--- 24) منطق الإعدادات
+-- 25) الإعدادات
 --==================================================================
 function applyWindowTransparency(pct)
     settings.transparency = math.clamp(pct, 0, 90)
@@ -1612,7 +2151,7 @@ resetBtn.MouseButton1Click:Connect(function()
 end)
 
 --==================================================================
--- 25) استجابة تغيّر حجم الشاشة
+-- 26) تغيّر حجم الشاشة
 --==================================================================
 local function onViewportChange()
     local w, h = computeWindowSize()
@@ -1639,9 +2178,10 @@ workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
 end)
 
 --==================================================================
--- 26) تشغيل تلقائي على Home + أنيميشن الدخول
+-- 27) تشغيل تلقائي + Blur + أنيميشن الدخول
 --==================================================================
 switchTab("home")
+applyBlur()
 
 do
     setAllTransparency(1)
@@ -1666,4 +2206,4 @@ do
     end
 end
 
-print("[LYNEX HUB v2.3] ✦ Ready — Home (scrollable) · News · Settings")
+print("[LYNEX HUB v2.5] ✦ Ready — Spectate System + Players tab + Search")
