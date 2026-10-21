@@ -1,14 +1,15 @@
 --!nonstrict
 --==================================================================
---  ✦ LYNEX HUB v2.7 ✦
---  Home • Players • News • Settings  |  Blur  |  Mobile  |  Purple
---  + Spectate System (persistent) + Teleport Button
+--  ✦ LYNEX HUB v2.8 ✦
+--  Home • Players • Player • News • Settings
+--  + Spectate + Teleport + Movement/Physics/Visuals
 --==================================================================
 
 local Players          = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TweenService     = game:GetService("TweenService")
 local Lighting         = game:GetService("Lighting")
+local RunService       = game:GetService("RunService")
 
 local localPlayer = Players.LocalPlayer
 local playerGui   = localPlayer:WaitForChild("PlayerGui")
@@ -16,14 +17,9 @@ local playerGui   = localPlayer:WaitForChild("PlayerGui")
 --==================================================================
 -- 0) الحالة
 --==================================================================
-local settings = {
-    animations   = true,
-    transparency = 15,
-    glow         = true,
-}
+local settings = { animations = true, transparency = 15, glow = true }
 local windowHidden = false
-local screenGui
-local blurObj
+local screenGui, blurObj
 
 --==================================================================
 -- 1) الجذر
@@ -42,25 +38,15 @@ end
 -- 2) الثيم
 --==================================================================
 local THEME = {
-    BG_PANEL   = Color3.fromRGB(16, 10, 28),
-    BG_HEADER  = Color3.fromRGB(22, 14, 38),
-    BG_SIDEBAR = Color3.fromRGB(13, 8, 24),
-    BG_CARD    = Color3.fromRGB(26, 17, 46),
-    BG_CARD_HI = Color3.fromRGB(36, 22, 62),
-
-    P_DEEP     = Color3.fromRGB(60, 24, 120),
-    P_MAIN     = Color3.fromRGB(112, 56, 200),
-    P_BRIGHT   = Color3.fromRGB(160, 96, 255),
-    P_GLOW     = Color3.fromRGB(190, 140, 255),
-
-    TX_MAIN    = Color3.fromRGB(240, 236, 255),
-    TX_DIM     = Color3.fromRGB(168, 156, 200),
-    TX_SUBTLE  = Color3.fromRGB(120, 110, 150),
-
-    BORDER     = Color3.fromRGB(70, 44, 120),
-    BORDER_HI  = Color3.fromRGB(130, 84, 220),
-    DANGER     = Color3.fromRGB(200, 60, 110),
-    DANGER_HI  = Color3.fromRGB(240, 90, 150),
+    BG_PANEL = Color3.fromRGB(16,10,28), BG_HEADER = Color3.fromRGB(22,14,38),
+    BG_SIDEBAR = Color3.fromRGB(13,8,24), BG_CARD = Color3.fromRGB(26,17,46),
+    BG_CARD_HI = Color3.fromRGB(36,22,62),
+    P_DEEP = Color3.fromRGB(60,24,120), P_MAIN = Color3.fromRGB(112,56,200),
+    P_BRIGHT = Color3.fromRGB(160,96,255), P_GLOW = Color3.fromRGB(190,140,255),
+    TX_MAIN = Color3.fromRGB(240,236,255), TX_DIM = Color3.fromRGB(168,156,200),
+    TX_SUBTLE = Color3.fromRGB(120,110,150),
+    BORDER = Color3.fromRGB(70,44,120), BORDER_HI = Color3.fromRGB(130,84,220),
+    DANGER = Color3.fromRGB(200,60,110), DANGER_HI = Color3.fromRGB(240,90,150),
 }
 
 local function pickFont(name, fallback)
@@ -69,9 +55,9 @@ local function pickFont(name, fallback)
 end
 
 local FONT = {
-    Logo    = pickFont("GothamBlack",  Enum.Font.GothamBold),
-    Bold    = pickFont("GothamBold",   Enum.Font.SourceSansBold),
-    Medium  = pickFont("GothamMedium", Enum.Font.SourceSans),
+    Logo = pickFont("GothamBlack", Enum.Font.GothamBold),
+    Bold = pickFont("GothamBold", Enum.Font.SourceSansBold),
+    Medium = pickFont("GothamMedium", Enum.Font.SourceSans),
     Regular = Enum.Font.Gotham,
 }
 
@@ -111,8 +97,8 @@ local function tween(inst, info, props)
 end
 
 local EASE = {
-    OUT  = TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-    IN   = TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+    OUT = TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+    IN = TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
     BACK = TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
     SINE = TweenInfo.new(0.30, Enum.EasingStyle.Sine, Enum.EasingDirection.Out),
 }
@@ -123,74 +109,51 @@ local EASE = {
 local function showToast(message)
     local parentGui = screenGui or playerGui
     local toast = create("Frame", {
-        Name = "Toast",
-        Size = UDim2.fromOffset(240, 40),
+        Name = "Toast", Size = UDim2.fromOffset(240, 40),
         Position = UDim2.new(0.5, -120, 0, -58),
-        BackgroundColor3 = THEME.BG_CARD,
-        BackgroundTransparency = 1,
-        BorderSizePixel = 0,
-        ZIndex = 100,
+        BackgroundColor3 = THEME.BG_CARD, BackgroundTransparency = 1,
+        BorderSizePixel = 0, ZIndex = 100,
     }, parentGui)
     addCorner(12, toast)
     local toastStroke = addStroke(THEME.P_BRIGHT, 1, 1, toast)
     local label = create("TextLabel", {
-        Size = UDim2.fromScale(1, 1),
-        BackgroundTransparency = 1,
-        Text = message,
-        Font = FONT.Bold, TextSize = 12,
-        TextColor3 = THEME.TX_MAIN,
-        TextTransparency = 1,
-        TextXAlignment = Enum.TextXAlignment.Center,
-        ZIndex = 101,
+        Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1,
+        Text = message, Font = FONT.Bold, TextSize = 12,
+        TextColor3 = THEME.TX_MAIN, TextTransparency = 1,
+        TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 101,
     }, toast)
-
     tween(toast, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-        Position = UDim2.new(0.5, -120, 0, 20),
-        BackgroundTransparency = 0.02,
+        Position = UDim2.new(0.5, -120, 0, 20), BackgroundTransparency = 0.02,
     })
     tween(toastStroke, TweenInfo.new(0.3), { Transparency = 0.4 })
     tween(label, TweenInfo.new(0.3), { TextTransparency = 0 })
-
     task.delay(2.4, function()
         if not toast or not toast.Parent then return end
         tween(toast, TweenInfo.new(0.3), {
-            Position = UDim2.new(0.5, -120, 0, -58),
-            BackgroundTransparency = 1,
+            Position = UDim2.new(0.5, -120, 0, -58), BackgroundTransparency = 1,
         })
         tween(toastStroke, TweenInfo.new(0.3), { Transparency = 1 })
         tween(label, TweenInfo.new(0.3), { TextTransparency = 1 })
-        task.delay(0.35, function()
-            if toast then toast:Destroy() end
-        end)
+        task.delay(0.35, function() if toast then toast:Destroy() end end)
     end)
 end
 
 local function copyText(text, label)
     if typeof(setclipboard) == "function" then
         local ok = pcall(setclipboard, text)
-        if ok then
-            showToast("✦ " .. (label or "Copied"))
-            return true
-        end
+        if ok then showToast("✦ " .. (label or "Copied")); return true end
     end
-    showToast("✦ " .. text)
-    return false
+    showToast("✦ " .. text); return false
 end
 
 local function openURL(url)
     if typeof(openbrowser) == "function" then
         local ok = pcall(openbrowser, url)
-        if ok then
-            showToast("◈ Opening Discord…")
-            return
-        end
+        if ok then showToast("◈ Opening Discord…"); return end
     end
     if typeof(setclipboard) == "function" then
         local ok = pcall(setclipboard, url)
-        if ok then
-            showToast("◈ Link copied — paste in browser")
-            return
-        end
+        if ok then showToast("◈ Link copied — paste in browser"); return end
     end
     showToast("◈ " .. url)
 end
@@ -199,35 +162,29 @@ end
 -- 3.2) Blur
 --==================================================================
 local BLUR_SIZE = 20
-
 local function applyBlur()
     if blurObj and blurObj.Parent then return end
     local ok = pcall(function()
         local existing = Lighting:FindFirstChild("LYNEX_HUB_Blur")
         if existing and existing:IsA("BlurEffect") then
-            existing.Size = BLUR_SIZE
-            blurObj = existing
-            return
+            existing.Size = BLUR_SIZE; blurObj = existing; return
         end
         local b = Instance.new("BlurEffect")
-        b.Name = "LYNEX_HUB_Blur"
-        b.Size = BLUR_SIZE
-        b.Parent = Lighting
+        b.Name = "LYNEX_HUB_Blur"; b.Size = BLUR_SIZE; b.Parent = Lighting
         blurObj = b
     end)
     if not ok then blurObj = nil end
 end
-
 local function removeBlur()
-    if blurObj and blurObj.Parent then
-        pcall(function() blurObj:Destroy() end)
-    end
+    if blurObj and blurObj.Parent then pcall(function() blurObj:Destroy() end) end
     blurObj = nil
 end
 
 --==================================================================
 -- 4) تنظيف
 --==================================================================
+if _G.LYNEX_CLEANUP then pcall(_G.LYNEX_CLEANUP) end
+
 local guiParent = resolveGuiParent()
 for _, p in ipairs({ guiParent, playerGui }) do
     if p then
@@ -247,14 +204,12 @@ local function getViewport()
     local cam = workspace.CurrentCamera
     return cam and cam.ViewportSize or Vector2.new(800, 600)
 end
-
 local function computeWindowSize()
     local vp = getViewport()
     local w = math.clamp(vp.X * 0.80, 280, 400)
     local h = math.clamp(vp.Y * 0.70, 340, 500)
     return math.floor(w), math.floor(h)
 end
-
 local function centerPosition(w, h)
     local vp = getViewport()
     return UDim2.fromOffset(math.floor((vp.X - w) / 2), math.floor((vp.Y - h) / 2))
@@ -264,259 +219,175 @@ end
 -- 6) ScreenGui + Root
 --==================================================================
 screenGui = create("ScreenGui", {
-    Name = "LYNEX_HUB",
-    ResetOnSpawn = false,
-    IgnoreGuiInset = true,
-    ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-    DisplayOrder = 999,
+    Name = "LYNEX_HUB", ResetOnSpawn = false, IgnoreGuiInset = true,
+    ZIndexBehavior = Enum.ZIndexBehavior.Sibling, DisplayOrder = 999,
 }, guiParent)
-
 if screenGui.Destroying then
-    screenGui.Destroying:Connect(function()
-        removeBlur()
-        -- لا نوقف Spectate عند تدمير GUI
-    end)
+    screenGui.Destroying:Connect(removeBlur)
 end
 
 local winW, winH = computeWindowSize()
-
 local root = create("Frame", {
-    Name = "Root",
-    Size = UDim2.fromOffset(winW, winH),
+    Name = "Root", Size = UDim2.fromOffset(winW, winH),
     Position = centerPosition(winW, winH),
-    BackgroundTransparency = 1,
-    ClipsDescendants = false,
-    ZIndex = 2,
+    BackgroundTransparency = 1, ClipsDescendants = false, ZIndex = 2,
 }, screenGui)
 
 local outerGlow = create("Frame", {
-    Name = "OuterGlow",
-    Size = UDim2.new(1, 18, 1, 18),
+    Name = "OuterGlow", Size = UDim2.new(1, 18, 1, 18),
     Position = UDim2.new(0, -9, 0, -9),
-    BackgroundColor3 = THEME.P_BRIGHT,
-    BackgroundTransparency = 0.85,
-    BorderSizePixel = 0,
-    ZIndex = 1,
+    BackgroundColor3 = THEME.P_BRIGHT, BackgroundTransparency = 0.85,
+    BorderSizePixel = 0, ZIndex = 1,
 }, root)
 addCorner(18, outerGlow)
 
 --==================================================================
--- 7) النافذة الرئيسية
+-- 7) Main
 --==================================================================
 local main = create("Frame", {
-    Name = "Main",
-    Size = UDim2.fromScale(1, 1),
-    BackgroundColor3 = THEME.BG_PANEL,
-    BackgroundTransparency = 0.08,
-    BorderSizePixel = 0,
-    ClipsDescendants = true,
-    ZIndex = 2,
+    Name = "Main", Size = UDim2.fromScale(1, 1),
+    BackgroundColor3 = THEME.BG_PANEL, BackgroundTransparency = 0.08,
+    BorderSizePixel = 0, ClipsDescendants = true, ZIndex = 2,
 }, root)
 addCorner(14, main)
 local mainStroke = addStroke(THEME.BORDER, 1.5, 0.15, main)
 addGradient(main, {
-    ColorSequenceKeypoint.new(0,   THEME.BG_PANEL),
+    ColorSequenceKeypoint.new(0, THEME.BG_PANEL),
     ColorSequenceKeypoint.new(0.5, THEME.BG_HEADER),
-    ColorSequenceKeypoint.new(1,   THEME.BG_PANEL),
+    ColorSequenceKeypoint.new(1, THEME.BG_PANEL),
 }, 135)
 
 --==================================================================
--- 8) الهيدر
+-- 8) Header
 --==================================================================
 local headerH = 42
 local header = create("Frame", {
-    Name = "Header",
-    Size = UDim2.new(1, 0, 0, headerH),
-    BackgroundColor3 = THEME.BG_HEADER,
-    BackgroundTransparency = 0.1,
-    BorderSizePixel = 0,
-    ZIndex = 3,
+    Name = "Header", Size = UDim2.new(1, 0, 0, headerH),
+    BackgroundColor3 = THEME.BG_HEADER, BackgroundTransparency = 0.1,
+    BorderSizePixel = 0, ZIndex = 3,
 }, main)
 addCorner(14, header)
-
 create("Frame", {
-    Size = UDim2.new(1, 0, 0, 14),
-    Position = UDim2.new(0, 0, 1, -14),
-    BackgroundColor3 = THEME.BG_HEADER,
-    BackgroundTransparency = 0.1,
-    BorderSizePixel = 0,
-    ZIndex = 3,
+    Size = UDim2.new(1, 0, 0, 14), Position = UDim2.new(0, 0, 1, -14),
+    BackgroundColor3 = THEME.BG_HEADER, BackgroundTransparency = 0.1,
+    BorderSizePixel = 0, ZIndex = 3,
 }, header)
 
 local menuBtn = create("TextButton", {
-    Name = "MenuBtn",
-    Size = UDim2.fromOffset(32, 32),
+    Name = "MenuBtn", Size = UDim2.fromOffset(32, 32),
     Position = UDim2.new(0, 7, 0.5, -16),
-    BackgroundColor3 = THEME.BG_CARD,
-    AutoButtonColor = false,
-    Text = "☰",
-    Font = FONT.Bold, TextSize = 17, TextColor3 = THEME.P_GLOW,
-    ZIndex = 4,
+    BackgroundColor3 = THEME.BG_CARD, AutoButtonColor = false,
+    Text = "☰", Font = FONT.Bold, TextSize = 17, TextColor3 = THEME.P_GLOW, ZIndex = 4,
 }, header)
-addCorner(8, menuBtn)
-addStroke(THEME.BORDER, 1, 0.3, menuBtn)
+addCorner(8, menuBtn); addStroke(THEME.BORDER, 1, 0.3, menuBtn)
 
 local title = create("TextLabel", {
-    Name = "Title",
-    Size = UDim2.new(1, -130, 1, 0),
-    Position = UDim2.new(0, 46, 0, 0),
-    BackgroundTransparency = 1,
-    Text = "LYNEX HUB",
-    Font = FONT.Logo, TextSize = 15,
-    TextColor3 = THEME.TX_MAIN,
-    TextXAlignment = Enum.TextXAlignment.Left,
-    TextStrokeColor3 = THEME.P_GLOW,
-    TextStrokeTransparency = 0.7,
-    ZIndex = 4,
+    Name = "Title", Size = UDim2.new(1, -130, 1, 0),
+    Position = UDim2.new(0, 46, 0, 0), BackgroundTransparency = 1,
+    Text = "LYNEX HUB", Font = FONT.Logo, TextSize = 15,
+    TextColor3 = THEME.TX_MAIN, TextXAlignment = Enum.TextXAlignment.Left,
+    TextStrokeColor3 = THEME.P_GLOW, TextStrokeTransparency = 0.7, ZIndex = 4,
 }, header)
 addGradient(title, {
-    ColorSequenceKeypoint.new(0,   THEME.TX_MAIN),
+    ColorSequenceKeypoint.new(0, THEME.TX_MAIN),
     ColorSequenceKeypoint.new(0.5, THEME.P_GLOW),
-    ColorSequenceKeypoint.new(1,   THEME.P_BRIGHT),
+    ColorSequenceKeypoint.new(1, THEME.P_BRIGHT),
 }, 90)
 
 local closeBtn = create("TextButton", {
-    Name = "CloseBtn",
-    Size = UDim2.fromOffset(32, 32),
+    Name = "CloseBtn", Size = UDim2.fromOffset(32, 32),
     Position = UDim2.new(1, -40, 0.5, -16),
-    BackgroundColor3 = THEME.BG_CARD,
-    AutoButtonColor = false,
-    Text = "×",
-    Font = FONT.Bold, TextSize = 19, TextColor3 = THEME.DANGER_HI,
-    ZIndex = 4,
+    BackgroundColor3 = THEME.BG_CARD, AutoButtonColor = false,
+    Text = "×", Font = FONT.Bold, TextSize = 19, TextColor3 = THEME.DANGER_HI, ZIndex = 4,
 }, header)
-addCorner(8, closeBtn)
-addStroke(THEME.DANGER, 1, 0.3, closeBtn)
+addCorner(8, closeBtn); addStroke(THEME.DANGER, 1, 0.3, closeBtn)
 
 --==================================================================
--- 9) Body & Sidebar & Content
+-- 9) Body / Sidebar / Content
 --==================================================================
 local body = create("Frame", {
-    Name = "Body",
-    Size = UDim2.new(1, 0, 1, -headerH),
+    Name = "Body", Size = UDim2.new(1, 0, 1, -headerH),
     Position = UDim2.new(0, 0, 0, headerH),
-    BackgroundTransparency = 1,
-    ZIndex = 3,
+    BackgroundTransparency = 1, ZIndex = 3,
 }, main)
 
 local sidebarW = 106
 local sidebar = create("Frame", {
-    Name = "Sidebar",
-    Size = UDim2.new(0, sidebarW, 1, 0),
-    BackgroundColor3 = THEME.BG_SIDEBAR,
-    BackgroundTransparency = 0.2,
-    BorderSizePixel = 0,
-    ClipsDescendants = true,
-    ZIndex = 3,
+    Name = "Sidebar", Size = UDim2.new(0, sidebarW, 1, 0),
+    BackgroundColor3 = THEME.BG_SIDEBAR, BackgroundTransparency = 0.2,
+    BorderSizePixel = 0, ClipsDescendants = true, ZIndex = 3,
 }, body)
 create("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }, sidebar)
 create("UIPadding", {
-    PaddingTop = UDim.new(0, 10),
-    PaddingLeft = UDim.new(0, 7),
-    PaddingRight = UDim.new(0, 7),
+    PaddingTop = UDim.new(0, 10), PaddingLeft = UDim.new(0, 7), PaddingRight = UDim.new(0, 7),
 }, sidebar)
 
 local content = create("Frame", {
-    Name = "Content",
-    Size = UDim2.new(1, -sidebarW, 1, 0),
-    Position = UDim2.new(0, sidebarW, 0, 0),
-    BackgroundTransparency = 1,
-    ZIndex = 3,
+    Name = "Content", Size = UDim2.new(1, -sidebarW, 1, 0),
+    Position = UDim2.new(0, sidebarW, 0, 0), BackgroundTransparency = 1, ZIndex = 3,
 }, body)
 create("UIPadding", {
-    PaddingTop = UDim.new(0, 12),
-    PaddingBottom = UDim.new(0, 12),
-    PaddingLeft = UDim.new(0, 10),
-    PaddingRight = UDim.new(0, 10),
+    PaddingTop = UDim.new(0, 12), PaddingBottom = UDim.new(0, 12),
+    PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10),
 }, content)
 
 local pagesContainer = create("Frame", {
-    Name = "Pages",
-    Size = UDim2.fromScale(1, 1),
-    BackgroundTransparency = 1,
-    ClipsDescendants = false,
-    ZIndex = 4,
+    Name = "Pages", Size = UDim2.fromScale(1, 1),
+    BackgroundTransparency = 1, ClipsDescendants = false, ZIndex = 4,
 }, content)
 
 --==================================================================
--- 10) أزرار التبويبات
+-- 10) Tabs  ◀️ إضافة Player
 --==================================================================
 local TABS = {
     { id = "home",     name = "Home",     icon = "⌂" },
     { id = "players",  name = "Players",  icon = "◉" },
+    { id = "player",   name = "Player",   icon = "●" },
     { id = "news",     name = "News",     icon = "✉" },
     { id = "settings", name = "Settings", icon = "⚙" },
 }
 
-local tabButtons = {}
-local tabPages   = {}
-local currentTab = nil
+local tabButtons, tabPages, currentTab = {}, {}, nil
 
 local function createTabButton(tab, order)
     local btn = create("TextButton", {
-        Name = tab.id .. "Tab",
-        Size = UDim2.new(1, 0, 0, 32),
-        BackgroundColor3 = THEME.BG_CARD,
-        AutoButtonColor = false,
-        Text = "",
-        LayoutOrder = order,
-        ZIndex = 4,
+        Name = tab.id .. "Tab", Size = UDim2.new(1, 0, 0, 32),
+        BackgroundColor3 = THEME.BG_CARD, AutoButtonColor = false,
+        Text = "", LayoutOrder = order, ZIndex = 4,
     }, sidebar)
     addCorner(8, btn)
     local stroke = addStroke(THEME.BORDER, 1, 0.4, btn)
-
     local indicator = create("Frame", {
-        Size = UDim2.new(0, 3, 0.55, 0),
-        Position = UDim2.new(0, 0, 0.225, 0),
-        BackgroundColor3 = THEME.P_GLOW,
-        BorderSizePixel = 0,
-        Visible = false,
-        ZIndex = 5,
+        Size = UDim2.new(0, 3, 0.55, 0), Position = UDim2.new(0, 0, 0.225, 0),
+        BackgroundColor3 = THEME.P_GLOW, BorderSizePixel = 0,
+        Visible = false, ZIndex = 5,
     }, btn)
     addCorner(2, indicator)
-
     local icon = create("TextLabel", {
-        Size = UDim2.fromOffset(20, 20),
-        Position = UDim2.new(0, 9, 0.5, -10),
-        BackgroundTransparency = 1,
-        Text = tab.icon,
-        Font = FONT.Bold, TextSize = 14,
-        TextColor3 = THEME.P_GLOW,
-        ZIndex = 5,
+        Size = UDim2.fromOffset(20, 20), Position = UDim2.new(0, 9, 0.5, -10),
+        BackgroundTransparency = 1, Text = tab.icon, Font = FONT.Bold, TextSize = 14,
+        TextColor3 = THEME.P_GLOW, ZIndex = 5,
     }, btn)
-
     local label = create("TextLabel", {
-        Size = UDim2.new(1, -36, 1, 0),
-        Position = UDim2.new(0, 32, 0, 0),
-        BackgroundTransparency = 1,
-        Text = tab.name,
-        Font = FONT.Medium, TextSize = 11,
-        TextColor3 = THEME.TX_MAIN,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        TextTruncate = Enum.TextTruncate.AtEnd,
-        ZIndex = 5,
+        Size = UDim2.new(1, -36, 1, 0), Position = UDim2.new(0, 32, 0, 0),
+        BackgroundTransparency = 1, Text = tab.name, Font = FONT.Medium, TextSize = 11,
+        TextColor3 = THEME.TX_MAIN, TextXAlignment = Enum.TextXAlignment.Left,
+        TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 5,
     }, btn)
-
     tabButtons[tab.id] = { btn = btn, stroke = stroke, indicator = indicator, icon = icon, label = label }
     return btn
 end
 
-for i, tab in ipairs(TABS) do
-    createTabButton(tab, i)
-end
+for i, tab in ipairs(TABS) do createTabButton(tab, i) end
 
 --==================================================================
--- 11) إنشاء الصفحات
+-- 11) Pages
 --==================================================================
 local function createPage(id, scrolling)
     local class = scrolling and "ScrollingFrame" or "Frame"
     local props = {
-        Name = id .. "Page",
-        Size = UDim2.fromScale(1, 1),
-        BackgroundTransparency = 1,
-        Visible = false,
-        BorderSizePixel = 0,
-        ZIndex = 4,
+        Name = id .. "Page", Size = UDim2.fromScale(1, 1),
+        BackgroundTransparency = 1, Visible = false, BorderSizePixel = 0, ZIndex = 4,
     }
     if scrolling then
         props.ScrollBarThickness = 3
@@ -531,415 +402,246 @@ local function createPage(id, scrolling)
 end
 
 --==================================================================
--- 12) صفحة Home
+-- 12) Home
 --==================================================================
 local homePage = createPage("home", true)
-create("UIListLayout", {
-    Padding = UDim.new(0, 10),
-    SortOrder = Enum.SortOrder.LayoutOrder,
-}, homePage)
+create("UIListLayout", { Padding = UDim.new(0, 10), SortOrder = Enum.SortOrder.LayoutOrder }, homePage)
 create("UIPadding", {
-    PaddingTop = UDim.new(0, 2),
-    PaddingBottom = UDim.new(0, 10),
-    PaddingRight = UDim.new(0, 6),
+    PaddingTop = UDim.new(0, 2), PaddingBottom = UDim.new(0, 10), PaddingRight = UDim.new(0, 6),
 }, homePage)
 
 local hero = create("Frame", {
-    Name = "Hero",
-    Size = UDim2.new(1, 0, 0, 68),
-    BackgroundTransparency = 1,
-    LayoutOrder = 1,
-    ZIndex = 4,
+    Name = "Hero", Size = UDim2.new(1, 0, 0, 68),
+    BackgroundTransparency = 1, LayoutOrder = 1, ZIndex = 4,
 }, homePage)
-
 local logo = create("TextLabel", {
-    Size = UDim2.new(1, 0, 0, 42),
-    BackgroundTransparency = 1,
-    Text = "LYNEX HUB",
-    Font = FONT.Logo,
-    TextSize = 26,
-    TextScaled = true,
-    TextColor3 = THEME.TX_MAIN,
-    TextStrokeColor3 = THEME.P_GLOW,
-    TextStrokeTransparency = 0.55,
-    TextXAlignment = Enum.TextXAlignment.Center,
-    ZIndex = 5,
+    Size = UDim2.new(1, 0, 0, 42), BackgroundTransparency = 1, Text = "LYNEX HUB",
+    Font = FONT.Logo, TextSize = 26, TextScaled = true, TextColor3 = THEME.TX_MAIN,
+    TextStrokeColor3 = THEME.P_GLOW, TextStrokeTransparency = 0.55,
+    TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 5,
 }, hero)
 addGradient(logo, {
-    ColorSequenceKeypoint.new(0,   THEME.TX_MAIN),
+    ColorSequenceKeypoint.new(0, THEME.TX_MAIN),
     ColorSequenceKeypoint.new(0.5, THEME.P_GLOW),
-    ColorSequenceKeypoint.new(1,   THEME.P_BRIGHT),
+    ColorSequenceKeypoint.new(1, THEME.P_BRIGHT),
 }, 90)
 create("UITextSizeConstraint", { MaxTextSize = 26, MinTextSize = 18 }, logo)
-
 create("TextLabel", {
-    Size = UDim2.new(1, 0, 0, 16),
-    Position = UDim2.new(0, 0, 0, 44),
-    BackgroundTransparency = 1,
-    Text = "PREMIUM  ·  INTERFACE",
-    Font = FONT.Medium, TextSize = 9,
-    TextColor3 = THEME.TX_SUBTLE,
-    TextXAlignment = Enum.TextXAlignment.Center,
-    ZIndex = 5,
+    Size = UDim2.new(1, 0, 0, 16), Position = UDim2.new(0, 0, 0, 44),
+    BackgroundTransparency = 1, Text = "PREMIUM  ·  INTERFACE",
+    Font = FONT.Medium, TextSize = 9, TextColor3 = THEME.TX_SUBTLE,
+    TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 5,
 }, hero)
 
 local profileCard = create("Frame", {
-    Name = "ProfileCard",
-    Size = UDim2.new(1, 0, 0, 90),
-    BackgroundColor3 = THEME.BG_CARD,
-    BackgroundTransparency = 0.05,
-    BorderSizePixel = 0,
-    LayoutOrder = 2,
-    ZIndex = 4,
+    Name = "ProfileCard", Size = UDim2.new(1, 0, 0, 90),
+    BackgroundColor3 = THEME.BG_CARD, BackgroundTransparency = 0.05,
+    BorderSizePixel = 0, LayoutOrder = 2, ZIndex = 4,
 }, homePage)
-addCorner(12, profileCard)
-addStroke(THEME.BORDER, 1, 0.15, profileCard)
+addCorner(12, profileCard); addStroke(THEME.BORDER, 1, 0.15, profileCard)
 
 local avatarFrame = create("Frame", {
-    Size = UDim2.fromOffset(66, 66),
-    Position = UDim2.new(0, 12, 0.5, -33),
-    BackgroundColor3 = THEME.BG_CARD_HI,
-    BorderSizePixel = 0,
-    ClipsDescendants = true,
-    ZIndex = 5,
+    Size = UDim2.fromOffset(66, 66), Position = UDim2.new(0, 12, 0.5, -33),
+    BackgroundColor3 = THEME.BG_CARD_HI, BorderSizePixel = 0,
+    ClipsDescendants = true, ZIndex = 5,
 }, profileCard)
-addCorner(33, avatarFrame)
-addStroke(THEME.P_BRIGHT, 2, 0.15, avatarFrame)
+addCorner(33, avatarFrame); addStroke(THEME.P_BRIGHT, 2, 0.15, avatarFrame)
 
 local avatarImg = create("ImageLabel", {
-    Size = UDim2.fromScale(1, 1),
-    BackgroundTransparency = 1,
-    Image = "",
-    ScaleType = Enum.ScaleType.Crop,
-    ZIndex = 6,
+    Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Image = "",
+    ScaleType = Enum.ScaleType.Crop, ZIndex = 6,
 }, avatarFrame)
 
 local infoX = 88
 local displayNameLbl = create("TextLabel", {
-    Size = UDim2.new(1, -infoX - 8, 0, 20),
-    Position = UDim2.new(0, infoX, 0, 10),
-    BackgroundTransparency = 1,
-    Text = "Loading…",
-    Font = FONT.Bold, TextSize = 14,
-    TextColor3 = THEME.TX_MAIN,
-    TextXAlignment = Enum.TextXAlignment.Left,
-    TextTruncate = Enum.TextTruncate.AtEnd,
-    ZIndex = 5,
+    Size = UDim2.new(1, -infoX - 8, 0, 20), Position = UDim2.new(0, infoX, 0, 10),
+    BackgroundTransparency = 1, Text = "Loading…", Font = FONT.Bold, TextSize = 14,
+    TextColor3 = THEME.TX_MAIN, TextXAlignment = Enum.TextXAlignment.Left,
+    TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 5,
 }, profileCard)
 
 local usernameLbl = create("TextLabel", {
-    Size = UDim2.new(1, -infoX - 8, 0, 14),
-    Position = UDim2.new(0, infoX, 0, 30),
-    BackgroundTransparency = 1,
-    Text = "@loading",
-    Font = FONT.Regular, TextSize = 11,
-    TextColor3 = THEME.TX_DIM,
-    TextXAlignment = Enum.TextXAlignment.Left,
-    TextTruncate = Enum.TextTruncate.AtEnd,
-    ZIndex = 5,
+    Size = UDim2.new(1, -infoX - 8, 0, 14), Position = UDim2.new(0, infoX, 0, 30),
+    BackgroundTransparency = 1, Text = "@loading", Font = FONT.Regular, TextSize = 11,
+    TextColor3 = THEME.TX_DIM, TextXAlignment = Enum.TextXAlignment.Left,
+    TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 5,
 }, profileCard)
 
 local function smallInfo(posX, width, iconText, labelText)
     local row = create("Frame", {
-        Size = UDim2.new(0, width, 0, 15),
-        Position = UDim2.new(0, posX, 0, 64),
-        BackgroundTransparency = 1,
-        ZIndex = 5,
+        Size = UDim2.new(0, width, 0, 15), Position = UDim2.new(0, posX, 0, 64),
+        BackgroundTransparency = 1, ZIndex = 5,
     }, profileCard)
     create("TextLabel", {
-        Size = UDim2.fromOffset(14, 15),
-        BackgroundTransparency = 1,
-        Text = iconText,
-        Font = FONT.Bold, TextSize = 10,
-        TextColor3 = THEME.P_GLOW,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        ZIndex = 6,
+        Size = UDim2.fromOffset(14, 15), BackgroundTransparency = 1, Text = iconText,
+        Font = FONT.Bold, TextSize = 10, TextColor3 = THEME.P_GLOW,
+        TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 6,
     }, row)
     local lbl = create("TextLabel", {
-        Size = UDim2.new(1, -16, 1, 0),
-        Position = UDim2.new(0, 16, 0, 0),
-        BackgroundTransparency = 1,
-        Text = labelText,
-        Font = FONT.Medium, TextSize = 10,
-        TextColor3 = THEME.TX_DIM,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        TextTruncate = Enum.TextTruncate.AtEnd,
-        ZIndex = 6,
+        Size = UDim2.new(1, -16, 1, 0), Position = UDim2.new(0, 16, 0, 0),
+        BackgroundTransparency = 1, Text = labelText, Font = FONT.Medium, TextSize = 10,
+        TextColor3 = THEME.TX_DIM, TextXAlignment = Enum.TextXAlignment.Left,
+        TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 6,
     }, row)
     return lbl
 end
-
 local uidLbl = smallInfo(infoX, 95, "#", "—")
 local ageLbl = smallInfo(infoX + 100, 95, "◷", "—")
 
 local devCard = create("Frame", {
-    Name = "DevCard",
-    Size = UDim2.new(1, 0, 0, 100),
-    BackgroundColor3 = THEME.BG_CARD,
-    BackgroundTransparency = 0.05,
-    BorderSizePixel = 0,
-    LayoutOrder = 3,
-    ZIndex = 4,
+    Name = "DevCard", Size = UDim2.new(1, 0, 0, 100),
+    BackgroundColor3 = THEME.BG_CARD, BackgroundTransparency = 0.05,
+    BorderSizePixel = 0, LayoutOrder = 3, ZIndex = 4,
 }, homePage)
-addCorner(12, devCard)
-addStroke(THEME.BORDER, 1, 0.15, devCard)
-
+addCorner(12, devCard); addStroke(THEME.BORDER, 1, 0.15, devCard)
 create("TextLabel", {
-    Size = UDim2.new(1, -20, 0, 22),
-    Position = UDim2.new(0, 12, 0, 8),
-    BackgroundTransparency = 1,
-    Text = "✦  DEVELOPER INFO",
-    Font = FONT.Bold, TextSize = 12,
-    TextColor3 = THEME.P_GLOW,
-    TextXAlignment = Enum.TextXAlignment.Left,
-    ZIndex = 5,
+    Size = UDim2.new(1, -20, 0, 22), Position = UDim2.new(0, 12, 0, 8),
+    BackgroundTransparency = 1, Text = "✦  DEVELOPER INFO",
+    Font = FONT.Bold, TextSize = 12, TextColor3 = THEME.P_GLOW,
+    TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 5,
 }, devCard)
 
 local function makeCopyRow(parent, order, iconText, prefix, valueText, copyPayload, copyLabel)
     local row = create("TextButton", {
-        Size = UDim2.new(1, -20, 0, 28),
-        Position = UDim2.new(0, 10, 0, 34 + order * 30),
-        BackgroundColor3 = THEME.BG_CARD_HI,
-        BackgroundTransparency = 0.7,
-        AutoButtonColor = false,
-        Text = "",
-        ZIndex = 5,
+        Size = UDim2.new(1, -20, 0, 28), Position = UDim2.new(0, 10, 0, 34 + order * 30),
+        BackgroundColor3 = THEME.BG_CARD_HI, BackgroundTransparency = 0.7,
+        AutoButtonColor = false, Text = "", ZIndex = 5,
     }, parent)
-    addCorner(6, row)
-    addStroke(THEME.BORDER, 1, 0.4, row)
-
+    addCorner(6, row); addStroke(THEME.BORDER, 1, 0.4, row)
     create("TextLabel", {
-        Size = UDim2.fromOffset(20, 28),
-        Position = UDim2.new(0, 4, 0, 0),
-        BackgroundTransparency = 1,
-        Text = iconText,
-        Font = FONT.Bold, TextSize = 12,
-        TextColor3 = THEME.P_GLOW,
-        ZIndex = 6,
+        Size = UDim2.fromOffset(20, 28), Position = UDim2.new(0, 4, 0, 0),
+        BackgroundTransparency = 1, Text = iconText, Font = FONT.Bold, TextSize = 12,
+        TextColor3 = THEME.P_GLOW, ZIndex = 6,
     }, row)
-
     create("TextLabel", {
-        Size = UDim2.new(0, 66, 1, 0),
-        Position = UDim2.new(0, 26, 0, 0),
-        BackgroundTransparency = 1,
-        Text = prefix,
-        Font = FONT.Medium, TextSize = 10,
-        TextColor3 = THEME.TX_SUBTLE,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        ZIndex = 6,
+        Size = UDim2.new(0, 66, 1, 0), Position = UDim2.new(0, 26, 0, 0),
+        BackgroundTransparency = 1, Text = prefix, Font = FONT.Medium, TextSize = 10,
+        TextColor3 = THEME.TX_SUBTLE, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 6,
     }, row)
-
     create("TextLabel", {
-        Size = UDim2.new(1, -112, 1, 0),
-        Position = UDim2.new(0, 96, 0, 0),
-        BackgroundTransparency = 1,
-        Text = valueText,
-        Font = FONT.Bold, TextSize = 11,
-        TextColor3 = THEME.TX_MAIN,
-        TextXAlignment = Enum.TextXAlignment.Right,
-        TextTruncate = Enum.TextTruncate.AtEnd,
-        ZIndex = 6,
+        Size = UDim2.new(1, -112, 1, 0), Position = UDim2.new(0, 96, 0, 0),
+        BackgroundTransparency = 1, Text = valueText, Font = FONT.Bold, TextSize = 11,
+        TextColor3 = THEME.TX_MAIN, TextXAlignment = Enum.TextXAlignment.Right,
+        TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 6,
     }, row)
-
     create("TextLabel", {
-        Size = UDim2.fromOffset(16, 28),
-        Position = UDim2.new(1, -20, 0, 0),
-        BackgroundTransparency = 1,
-        Text = "⧉",
-        Font = FONT.Bold, TextSize = 11,
-        TextColor3 = THEME.P_GLOW,
-        TextTransparency = 0.3,
-        ZIndex = 6,
+        Size = UDim2.fromOffset(16, 28), Position = UDim2.new(1, -20, 0, 0),
+        BackgroundTransparency = 1, Text = "⧉", Font = FONT.Bold, TextSize = 11,
+        TextColor3 = THEME.P_GLOW, TextTransparency = 0.3, ZIndex = 6,
     }, row)
-
-    row.MouseButton1Click:Connect(function()
-        copyText(copyPayload, copyLabel)
-    end)
-
-    row.MouseEnter:Connect(function()
-        tween(row, TweenInfo.new(0.15), { BackgroundTransparency = 0.3 })
-    end)
-    row.MouseLeave:Connect(function()
-        tween(row, TweenInfo.new(0.15), { BackgroundTransparency = 0.7 })
-    end)
-
-    return row
+    row.MouseButton1Click:Connect(function() copyText(copyPayload, copyLabel) end)
+    row.MouseEnter:Connect(function() tween(row, TweenInfo.new(0.15), { BackgroundTransparency = 0.3 }) end)
+    row.MouseLeave:Connect(function() tween(row, TweenInfo.new(0.15), { BackgroundTransparency = 0.7 }) end)
 end
-
-makeCopyRow(devCard, 0, "◆", "Roblox",  "hamza000599", "hamza000599", "Roblox username copied")
-makeCopyRow(devCard, 1, "◈", "Discord", "hamza.abc0",   "hamza.abc0",   "Discord username copied")
+makeCopyRow(devCard, 0, "◆", "Roblox", "hamza000599", "hamza000599", "Roblox username copied")
+makeCopyRow(devCard, 1, "◈", "Discord", "hamza.abc0", "hamza.abc0", "Discord username copied")
 
 local SCRIPT_INFO = {
-    { icon = "✦", label = "Script Name",     value = "LYNEX HUB" },
-    { icon = "◆", label = "Version",         value = "V2.7.0" },
-    { icon = "◉", label = "Developer",       value = "hamza000599" },
-    { icon = "◈", label = "Language",        value = "Luau" },
-    { icon = "▣", label = "Platform",        value = "Roblox" },
-    { icon = "▤", label = "Executor",        value = "Delta" },
-    { icon = "◐", label = "UI Theme",        value = "Purple" },
-    { icon = "▬", label = "Device Support",  value = "Mobile" },
-    { icon = "●", label = "Status",          value = "Active" },
-    { icon = "◷", label = "Last Update",     value = "—" },
+    { icon = "✦", label = "Script Name", value = "LYNEX HUB" },
+    { icon = "◆", label = "Version", value = "V2.8.0" },
+    { icon = "◉", label = "Developer", value = "hamza000599" },
+    { icon = "◈", label = "Language", value = "Luau" },
+    { icon = "▣", label = "Platform", value = "Roblox" },
+    { icon = "▤", label = "Executor", value = "Delta" },
+    { icon = "◐", label = "UI Theme", value = "Purple" },
+    { icon = "▬", label = "Device Support", value = "Mobile" },
+    { icon = "●", label = "Status", value = "Active" },
+    { icon = "◷", label = "Last Update", value = "—" },
 }
 
 local scriptCardHeight = 34 + (#SCRIPT_INFO * 22) + 10
 local scriptCard = create("Frame", {
-    Name = "ScriptCard",
-    Size = UDim2.new(1, 0, 0, scriptCardHeight),
-    BackgroundColor3 = THEME.BG_CARD,
-    BackgroundTransparency = 0.05,
-    BorderSizePixel = 0,
-    LayoutOrder = 4,
-    ZIndex = 4,
+    Name = "ScriptCard", Size = UDim2.new(1, 0, 0, scriptCardHeight),
+    BackgroundColor3 = THEME.BG_CARD, BackgroundTransparency = 0.05,
+    BorderSizePixel = 0, LayoutOrder = 4, ZIndex = 4,
 }, homePage)
-addCorner(12, scriptCard)
-addStroke(THEME.BORDER, 1, 0.15, scriptCard)
-
+addCorner(12, scriptCard); addStroke(THEME.BORDER, 1, 0.15, scriptCard)
 create("TextLabel", {
-    Size = UDim2.new(1, -20, 0, 22),
-    Position = UDim2.new(0, 12, 0, 8),
-    BackgroundTransparency = 1,
-    Text = "✦  SCRIPT INFORMATION",
-    Font = FONT.Bold, TextSize = 12,
-    TextColor3 = THEME.P_GLOW,
-    TextXAlignment = Enum.TextXAlignment.Left,
-    ZIndex = 5,
+    Size = UDim2.new(1, -20, 0, 22), Position = UDim2.new(0, 12, 0, 8),
+    BackgroundTransparency = 1, Text = "✦  SCRIPT INFORMATION",
+    Font = FONT.Bold, TextSize = 12, TextColor3 = THEME.P_GLOW,
+    TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 5,
 }, scriptCard)
 
 local function makeInfoRow(parent, order, iconText, labelText, valueText)
     local row = create("Frame", {
-        Size = UDim2.new(1, -20, 0, 20),
-        Position = UDim2.new(0, 10, 0, 34 + order * 22),
-        BackgroundTransparency = 1,
-        ZIndex = 5,
+        Size = UDim2.new(1, -20, 0, 20), Position = UDim2.new(0, 10, 0, 34 + order * 22),
+        BackgroundTransparency = 1, ZIndex = 5,
     }, parent)
-
     create("TextLabel", {
-        Size = UDim2.fromOffset(14, 20),
-        BackgroundTransparency = 1,
-        Text = iconText,
-        Font = FONT.Bold, TextSize = 10,
-        TextColor3 = THEME.P_GLOW,
-        ZIndex = 6,
+        Size = UDim2.fromOffset(14, 20), BackgroundTransparency = 1, Text = iconText,
+        Font = FONT.Bold, TextSize = 10, TextColor3 = THEME.P_GLOW, ZIndex = 6,
     }, row)
-
     create("TextLabel", {
-        Size = UDim2.new(0, 105, 1, 0),
-        Position = UDim2.new(0, 18, 0, 0),
-        BackgroundTransparency = 1,
-        Text = labelText,
-        Font = FONT.Medium, TextSize = 10,
-        TextColor3 = THEME.TX_SUBTLE,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        ZIndex = 6,
+        Size = UDim2.new(0, 105, 1, 0), Position = UDim2.new(0, 18, 0, 0),
+        BackgroundTransparency = 1, Text = labelText, Font = FONT.Medium, TextSize = 10,
+        TextColor3 = THEME.TX_SUBTLE, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 6,
     }, row)
-
     create("TextLabel", {
-        Size = UDim2.new(1, -128, 1, 0),
-        Position = UDim2.new(0, 123, 0, 0),
-        BackgroundTransparency = 1,
-        Text = valueText,
-        Font = FONT.Bold, TextSize = 10,
-        TextColor3 = THEME.TX_MAIN,
-        TextXAlignment = Enum.TextXAlignment.Right,
-        TextTruncate = Enum.TextTruncate.AtEnd,
-        ZIndex = 6,
+        Size = UDim2.new(1, -128, 1, 0), Position = UDim2.new(0, 123, 0, 0),
+        BackgroundTransparency = 1, Text = valueText, Font = FONT.Bold, TextSize = 10,
+        TextColor3 = THEME.TX_MAIN, TextXAlignment = Enum.TextXAlignment.Right,
+        TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 6,
     }, row)
 end
-
 for i, info in ipairs(SCRIPT_INFO) do
     makeInfoRow(scriptCard, i - 1, info.icon, info.label, info.value)
 end
 
 local DISCORD_URL = "https://discord.gg/xzNRnKyVd"
-
 local discordBtn = create("TextButton", {
-    Name = "DiscordBtn",
-    Size = UDim2.new(1, 0, 0, 52),
-    BackgroundColor3 = THEME.P_MAIN,
-    AutoButtonColor = false,
-    Text = "",
-    LayoutOrder = 5,
-    ZIndex = 4,
+    Name = "DiscordBtn", Size = UDim2.new(1, 0, 0, 52),
+    BackgroundColor3 = THEME.P_MAIN, AutoButtonColor = false, Text = "",
+    LayoutOrder = 5, ZIndex = 4,
 }, homePage)
 addCorner(12, discordBtn)
 local discordStroke = addStroke(THEME.P_GLOW, 2, 0.35, discordBtn)
 addGradient(discordBtn, {
-    ColorSequenceKeypoint.new(0,   THEME.P_MAIN),
+    ColorSequenceKeypoint.new(0, THEME.P_MAIN),
     ColorSequenceKeypoint.new(0.5, THEME.P_BRIGHT),
-    ColorSequenceKeypoint.new(1,   THEME.P_MAIN),
+    ColorSequenceKeypoint.new(1, THEME.P_MAIN),
 }, 90)
-
 create("TextLabel", {
-    Size = UDim2.fromScale(1, 1),
-    BackgroundTransparency = 1,
-    Text = "◈   JOIN OUR DISCORD",
-    Font = FONT.Bold, TextSize = 15,
-    TextColor3 = THEME.TX_MAIN,
-    TextStrokeColor3 = Color3.fromRGB(40, 20, 80),
-    TextStrokeTransparency = 0.7,
-    ZIndex = 5,
+    Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1,
+    Text = "◈   JOIN OUR DISCORD", Font = FONT.Bold, TextSize = 15,
+    TextColor3 = THEME.TX_MAIN, TextStrokeColor3 = Color3.fromRGB(40, 20, 80),
+    TextStrokeTransparency = 0.7, ZIndex = 5,
 }, discordBtn)
-
-discordBtn.MouseButton1Click:Connect(function()
-    openURL(DISCORD_URL)
-end)
-
+discordBtn.MouseButton1Click:Connect(function() openURL(DISCORD_URL) end)
 if UserInputService.MouseEnabled then
-    discordBtn.MouseEnter:Connect(function()
-        tween(discordStroke, TweenInfo.new(0.18), { Transparency = 0.1 })
-    end)
-    discordBtn.MouseLeave:Connect(function()
-        tween(discordStroke, TweenInfo.new(0.18), { Transparency = 0.35 })
-    end)
+    discordBtn.MouseEnter:Connect(function() tween(discordStroke, TweenInfo.new(0.18), { Transparency = 0.1 }) end)
+    discordBtn.MouseLeave:Connect(function() tween(discordStroke, TweenInfo.new(0.18), { Transparency = 0.35 }) end)
 end
 
 --==================================================================
--- 13) Spectate System (persistent, GUI-independent)
+-- 13) Spectate System
 --==================================================================
-local spectate = {
-    active     = false,
-    target     = nil,
-    connection = nil,
-}
-
-local spectateButtons = {}  -- [player] = { btn, stroke }
+local spectate = { active = false, target = nil, connection = nil }
+local spectateButtons = {}
 local floatingBadge = nil
 
 local spectateIndicator = create("Frame", {
-    Name = "SpectateIndicator",
-    Size = UDim2.fromOffset(240, 34),
+    Name = "SpectateIndicator", Size = UDim2.fromOffset(240, 34),
     Position = UDim2.new(0.5, -120, 1, -48),
-    BackgroundColor3 = THEME.BG_CARD,
-    BackgroundTransparency = 0.05,
-    BorderSizePixel = 0,
-    Visible = false,
-    ZIndex = 100,
+    BackgroundColor3 = THEME.BG_CARD, BackgroundTransparency = 0.05,
+    BorderSizePixel = 0, Visible = false, ZIndex = 100,
 }, screenGui)
 addCorner(17, spectateIndicator)
 addStroke(THEME.P_BRIGHT, 1.5, 0.2, spectateIndicator)
 
 local spectateIndicatorLabel = create("TextLabel", {
-    Size = UDim2.new(1, -34, 1, 0),
-    BackgroundTransparency = 1,
-    Text = "◉  Spectating",
-    Font = FONT.Bold, TextSize = 12,
-    TextColor3 = THEME.TX_MAIN,
-    TextXAlignment = Enum.TextXAlignment.Center,
-    TextTruncate = Enum.TextTruncate.AtEnd,
-    ZIndex = 101,
+    Size = UDim2.new(1, -34, 1, 0), BackgroundTransparency = 1,
+    Text = "◉  Spectating", Font = FONT.Bold, TextSize = 12,
+    TextColor3 = THEME.TX_MAIN, TextXAlignment = Enum.TextXAlignment.Center,
+    TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 101,
 }, spectateIndicator)
 
 local spectateStopBtn = create("TextButton", {
-    Name = "StopBtn",
-    Size = UDim2.fromOffset(24, 24),
+    Name = "StopBtn", Size = UDim2.fromOffset(24, 24),
     Position = UDim2.new(1, -28, 0.5, -12),
-    BackgroundColor3 = THEME.DANGER,
-    AutoButtonColor = false,
-    Text = "✕",
-    Font = FONT.Bold, TextSize = 11,
-    TextColor3 = THEME.TX_MAIN,
-    ZIndex = 102,
+    BackgroundColor3 = THEME.DANGER, AutoButtonColor = false,
+    Text = "✕", Font = FONT.Bold, TextSize = 11,
+    TextColor3 = THEME.TX_MAIN, ZIndex = 102,
 }, spectateIndicator)
 addCorner(12, spectateStopBtn)
 local spectateStopStroke = addStroke(THEME.DANGER_HI, 1, 0.3, spectateStopBtn)
@@ -976,11 +678,8 @@ local function refreshSpectateButtons()
 end
 
 local function updateSpectateIndicator()
-    local shouldShow = spectate.active
-        and spectate.target
-        and spectate.target.Parent
-        and not windowHidden
-
+    local shouldShow = spectate.active and spectate.target
+        and spectate.target.Parent and not windowHidden
     if shouldShow then
         spectateIndicatorLabel.Text = "◉  Spectating: " .. displayNameOf(spectate.target)
         if not spectateIndicator.Visible then
@@ -1004,17 +703,13 @@ local function updateSpectateIndicator()
             end)
         end
     end
-
-    if floatingBadge then
-        floatingBadge.Visible = spectate.active
-    end
+    if floatingBadge then floatingBadge.Visible = spectate.active end
 end
 
 local function bindCameraToTarget()
     if not spectate.active or not spectate.target then return end
     if not spectate.target.Parent then
-        spectate.active = false
-        spectate.target = nil
+        spectate.active = false; spectate.target = nil
         if spectate.connection then
             pcall(function() spectate.connection:Disconnect() end)
             spectate.connection = nil
@@ -1024,28 +719,22 @@ local function bindCameraToTarget()
             local myHum = getHumanoid(localPlayer)
             if myHum then cam.CameraSubject = myHum end
         end
-        updateSpectateIndicator()
-        refreshSpectateButtons()
+        updateSpectateIndicator(); refreshSpectateButtons()
         return
     end
     local cam = workspace.CurrentCamera
     if not cam then return end
     local hum = getHumanoid(spectate.target)
-    if hum then
-        cam.CameraSubject = hum
-    end
+    if hum then cam.CameraSubject = hum end
 end
 
 local function stopSpectating(reason)
     if not spectate.active then return end
-    spectate.active = false
-    spectate.target = nil
-
+    spectate.active = false; spectate.target = nil
     if spectate.connection then
         pcall(function() spectate.connection:Disconnect() end)
         spectate.connection = nil
     end
-
     local cam = workspace.CurrentCamera
     if cam then
         local myHum = getHumanoid(localPlayer)
@@ -1062,45 +751,23 @@ local function stopSpectating(reason)
             end)
         end
     end
-
-    updateSpectateIndicator()
-    refreshSpectateButtons()
-
-    if reason and reason ~= "silent" then
-        showToast("◉  " .. reason)
-    end
+    updateSpectateIndicator(); refreshSpectateButtons()
+    if reason and reason ~= "silent" then showToast("◉  " .. reason) end
 end
 
 local function startSpectating(targetPlayer)
     if not targetPlayer then return end
-    if targetPlayer == localPlayer then
-        showToast("◉  Cannot spectate yourself")
-        return
-    end
-    if not targetPlayer.Parent then
-        showToast("◉  Player unavailable")
-        return
-    end
-
-    if spectate.active and spectate.target == targetPlayer then
-        stopSpectating()
-        return
-    end
-
+    if targetPlayer == localPlayer then showToast("◉  Cannot spectate yourself"); return end
+    if not targetPlayer.Parent then showToast("◉  Player unavailable"); return end
+    if spectate.active and spectate.target == targetPlayer then stopSpectating(); return end
     if spectate.connection then
         pcall(function() spectate.connection:Disconnect() end)
         spectate.connection = nil
     end
-
-    spectate.active = true
-    spectate.target = targetPlayer
-
+    spectate.active = true; spectate.target = targetPlayer
     local hum = getHumanoid(targetPlayer)
     local cam = workspace.CurrentCamera
-    if hum and cam then
-        cam.CameraSubject = hum
-    end
-
+    if hum and cam then cam.CameraSubject = hum end
     spectate.connection = targetPlayer.CharacterAdded:Connect(function(char)
         if not spectate.active or spectate.target ~= targetPlayer then return end
         task.wait(0.1)
@@ -1110,16 +777,10 @@ local function startSpectating(targetPlayer)
             workspace.CurrentCamera.CameraSubject = newHum
         end
     end)
-
-    updateSpectateIndicator()
-    refreshSpectateButtons()
-
+    updateSpectateIndicator(); refreshSpectateButtons()
     local disp = displayNameOf(targetPlayer)
-    if hum then
-        showToast("◉  Spectating " .. disp)
-    else
-        showToast("◉  Waiting for " .. disp .. "…")
-    end
+    if hum then showToast("◉  Spectating " .. disp)
+    else showToast("◉  Waiting for " .. disp .. "…") end
 end
 
 Players.PlayerRemoving:Connect(function(p)
@@ -1136,10 +797,7 @@ localPlayer.CharacterAdded:Connect(function()
     end
 end)
 
-spectateStopBtn.MouseButton1Click:Connect(function()
-    stopSpectating()
-end)
-
+spectateStopBtn.MouseButton1Click:Connect(function() stopSpectating() end)
 if UserInputService.MouseEnabled then
     spectateStopBtn.MouseEnter:Connect(function()
         tween(spectateStopStroke, TweenInfo.new(0.15), { Transparency = 0 })
@@ -1152,266 +810,157 @@ if UserInputService.MouseEnabled then
 end
 
 --==================================================================
--- 13.6) Teleport System  ◀️ جديد
+-- 13.6) Teleport System
 --==================================================================
 local TELEPORT_COOLDOWN = 1.0
 local lastTeleportTime = 0
 
 local function teleportToPlayer(targetPlayer, button)
-    -- تحقق من الهدف
     if not targetPlayer or not targetPlayer.Parent then
-        showToast("➤  Player unavailable")
-        return
+        showToast("➤  Player unavailable"); return
     end
-    if targetPlayer == localPlayer then
-        showToast("➤  Cannot teleport to yourself")
-        return
-    end
-
-    -- cooldown (يمنع السبام)
+    if targetPlayer == localPlayer then showToast("➤  Cannot teleport to yourself"); return end
     local now = os.clock()
-    if now - lastTeleportTime < TELEPORT_COOLDOWN then
-        return
-    end
+    if now - lastTeleportTime < TELEPORT_COOLDOWN then return end
     lastTeleportTime = now
-
-    -- تحقق من شخصية اللاعب المحلي
     local myChar = localPlayer.Character
     local myHum  = myChar and myChar:FindFirstChildOfClass("Humanoid")
     local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
     if not (myChar and myHum and myRoot) then
-        showToast("➤  Your character is not ready")
-        return
+        showToast("➤  Your character is not ready"); return
     end
-    if myHum.Health <= 0 then
-        showToast("➤  You are dead")
-        return
-    end
-
-    -- تحقق من شخصية الهدف
+    if myHum.Health <= 0 then showToast("➤  You are dead"); return end
     local targetChar = targetPlayer.Character
     local targetHum  = targetChar and targetChar:FindFirstChildOfClass("Humanoid")
     local targetRoot = targetChar and targetChar:FindFirstChild("HumanoidRootPart")
     if not (targetChar and targetHum and targetRoot) then
-        showToast("➤  " .. displayNameOf(targetPlayer) .. " has no character")
-        return
+        showToast("➤  " .. displayNameOf(targetPlayer) .. " has no character"); return
     end
     if targetHum.Health <= 0 then
-        showToast("➤  " .. displayNameOf(targetPlayer) .. " is dead")
-        return
+        showToast("➤  " .. displayNameOf(targetPlayer) .. " is dead"); return
     end
-
-    -- تنفيذ الانتقال (خلف الهدف بـ 4 studs مع الحفاظ على الارتفاع)
-    -- ملاحظة: نستخدم PivotTo الافتراضي — إذا كانت اللعبة تمنع الانتقال
-    -- عبر anti-cheat server-side، فالقرار النهائي للعبة وليس لنا.
     local destination = targetRoot.CFrame * CFrame.new(0, 0, 4)
-    local ok = pcall(function()
-        myChar:PivotTo(destination)
-    end)
-    if not ok then
-        pcall(function()
-            myRoot.CFrame = destination
-        end)
-    end
-
+    local ok = pcall(function() myChar:PivotTo(destination) end)
+    if not ok then pcall(function() myRoot.CFrame = destination end) end
     showToast("➤  Teleported to " .. displayNameOf(targetPlayer))
-
-    -- تأثير cooldown بصري على الزر
     if button and button.Parent then
-        local origText = button.Text
-        local origBG   = button.BackgroundColor3
-        button.Text = "➤  …"
-        button.BackgroundColor3 = THEME.BG_CARD_HI
+        local origText, origBG = button.Text, button.BackgroundColor3
+        button.Text = "➤  …"; button.BackgroundColor3 = THEME.BG_CARD_HI
         task.delay(TELEPORT_COOLDOWN, function()
             if button and button.Parent then
-                button.Text = origText
-                button.BackgroundColor3 = origBG
+                button.Text = origText; button.BackgroundColor3 = origBG
             end
         end)
     end
 end
 
 --==================================================================
--- 14) صفحة Players
+-- 14) Players Page
 --==================================================================
 local playersPage = createPage("players")
 
 local searchContainer = create("Frame", {
-    Name = "SearchContainer",
-    Size = UDim2.new(1, 0, 0, 42),
-    BackgroundColor3 = THEME.BG_CARD,
-    BackgroundTransparency = 0.05,
-    BorderSizePixel = 0,
-    ZIndex = 4,
+    Name = "SearchContainer", Size = UDim2.new(1, 0, 0, 42),
+    BackgroundColor3 = THEME.BG_CARD, BackgroundTransparency = 0.05,
+    BorderSizePixel = 0, ZIndex = 4,
 }, playersPage)
-addCorner(10, searchContainer)
-addStroke(THEME.BORDER, 1, 0.2, searchContainer)
-
+addCorner(10, searchContainer); addStroke(THEME.BORDER, 1, 0.2, searchContainer)
 create("TextLabel", {
-    Size = UDim2.fromOffset(20, 42),
-    Position = UDim2.new(0, 8, 0, 0),
-    BackgroundTransparency = 1,
-    Text = "⌕",
-    Font = FONT.Bold, TextSize = 16,
-    TextColor3 = THEME.P_GLOW,
-    ZIndex = 5,
+    Size = UDim2.fromOffset(20, 42), Position = UDim2.new(0, 8, 0, 0),
+    BackgroundTransparency = 1, Text = "⌕", Font = FONT.Bold, TextSize = 16,
+    TextColor3 = THEME.P_GLOW, ZIndex = 5,
 }, searchContainer)
 
 local searchBox = create("TextBox", {
-    Name = "SearchBox",
-    Size = UDim2.new(1, -72, 1, 0),
-    Position = UDim2.new(0, 30, 0, 0),
-    BackgroundTransparency = 1,
-    Text = "",
+    Name = "SearchBox", Size = UDim2.new(1, -72, 1, 0),
+    Position = UDim2.new(0, 30, 0, 0), BackgroundTransparency = 1, Text = "",
     PlaceholderText = "Search username or display name…",
-    PlaceholderColor3 = THEME.TX_SUBTLE,
-    Font = FONT.Medium, TextSize = 12,
-    TextColor3 = THEME.TX_MAIN,
-    TextXAlignment = Enum.TextXAlignment.Left,
-    ClearTextOnFocus = false,
-    MultiLine = false,
-    TextEditable = true,
-    ZIndex = 5,
+    PlaceholderColor3 = THEME.TX_SUBTLE, Font = FONT.Medium, TextSize = 12,
+    TextColor3 = THEME.TX_MAIN, TextXAlignment = Enum.TextXAlignment.Left,
+    ClearTextOnFocus = false, MultiLine = false, TextEditable = true, ZIndex = 5,
 }, searchContainer)
 
 local clearBtn = create("TextButton", {
-    Size = UDim2.fromOffset(30, 30),
-    Position = UDim2.new(1, -36, 0.5, -15),
-    BackgroundColor3 = THEME.BG_CARD_HI,
-    AutoButtonColor = false,
-    Text = "✕",
-    Font = FONT.Bold, TextSize = 11,
-    TextColor3 = THEME.P_GLOW,
-    Visible = false,
-    ZIndex = 5,
+    Size = UDim2.fromOffset(30, 30), Position = UDim2.new(1, -36, 0.5, -15),
+    BackgroundColor3 = THEME.BG_CARD_HI, AutoButtonColor = false,
+    Text = "✕", Font = FONT.Bold, TextSize = 11, TextColor3 = THEME.P_GLOW,
+    Visible = false, ZIndex = 5,
 }, searchContainer)
 addCorner(6, clearBtn)
 
 local playersList = create("ScrollingFrame", {
-    Name = "PlayersList",
-    Size = UDim2.new(1, 0, 1, -50),
-    Position = UDim2.new(0, 0, 0, 50),
-    BackgroundTransparency = 1,
-    BorderSizePixel = 0,
-    ScrollBarThickness = 3,
-    ScrollBarImageColor3 = THEME.P_BRIGHT,
-    CanvasSize = UDim2.new(0, 0, 0, 0),
+    Name = "PlayersList", Size = UDim2.new(1, 0, 1, -50),
+    Position = UDim2.new(0, 0, 0, 50), BackgroundTransparency = 1,
+    BorderSizePixel = 0, ScrollBarThickness = 3,
+    ScrollBarImageColor3 = THEME.P_BRIGHT, CanvasSize = UDim2.new(0, 0, 0, 0),
     AutomaticCanvasSize = Enum.AutomaticSize.Y,
-    ScrollingDirection = Enum.ScrollingDirection.Y,
-    ZIndex = 4,
+    ScrollingDirection = Enum.ScrollingDirection.Y, ZIndex = 4,
 }, playersPage)
-create("UIListLayout", {
-    Padding = UDim.new(0, 8),
-    SortOrder = Enum.SortOrder.LayoutOrder,
-}, playersList)
-create("UIPadding", {
-    PaddingRight = UDim.new(0, 4),
-    PaddingBottom = UDim.new(0, 6),
-}, playersList)
+create("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder }, playersList)
+create("UIPadding", { PaddingRight = UDim.new(0, 4), PaddingBottom = UDim.new(0, 6) }, playersList)
 
--- ── زر مشترك: press effect + hover ──
-local function styleActionButton(btn, stroke, hoverBaseColor)
+local function styleActionButton(btn, stroke)
     local baseSize = btn.Size
     local pressing = false
     local function scaleTo(f, dur)
         tween(btn, TweenInfo.new(dur), {
-            Size = UDim2.new(
-                baseSize.X.Scale * f, baseSize.X.Offset * f,
-                baseSize.Y.Scale * f, baseSize.Y.Offset * f
-            )
+            Size = UDim2.new(baseSize.X.Scale * f, baseSize.X.Offset * f,
+                             baseSize.Y.Scale * f, baseSize.Y.Offset * f)
         })
     end
     btn.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1
            or input.UserInputType == Enum.UserInputType.Touch then
-            pressing = true
-            scaleTo(0.93, 0.08)
+            pressing = true; scaleTo(0.93, 0.08)
         end
     end)
     btn.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1
            or input.UserInputType == Enum.UserInputType.Touch then
-            if pressing then
-                pressing = false
-                scaleTo(1, 0.14)
-            end
+            if pressing then pressing = false; scaleTo(1, 0.14) end
         end
     end)
     if UserInputService.MouseEnabled then
-        btn.MouseEnter:Connect(function()
-            tween(stroke, TweenInfo.new(0.15), { Transparency = 0.05 })
-        end)
-        btn.MouseLeave:Connect(function()
-            tween(stroke, TweenInfo.new(0.15), { Transparency = 0.25 })
-        end)
+        btn.MouseEnter:Connect(function() tween(stroke, TweenInfo.new(0.15), { Transparency = 0.05 }) end)
+        btn.MouseLeave:Connect(function() tween(stroke, TweenInfo.new(0.15), { Transparency = 0.25 }) end)
     end
 end
 
--- ── بناء بطاقة لاعب (Spectate + Teleport جنباً إلى جنب) ──
 local function buildPlayerCard(player, order)
     local isSpectating = (spectate.active and spectate.target == player)
-
     local card = create("Frame", {
-        Name = "P_" .. player.UserId,
-        Size = UDim2.new(1, 0, 0, 122),
-        BackgroundColor3 = THEME.BG_CARD,
-        BackgroundTransparency = 0.05,
-        BorderSizePixel = 0,
-        LayoutOrder = order,
-        ZIndex = 5,
+        Name = "P_" .. player.UserId, Size = UDim2.new(1, 0, 0, 122),
+        BackgroundColor3 = THEME.BG_CARD, BackgroundTransparency = 0.05,
+        BorderSizePixel = 0, LayoutOrder = order, ZIndex = 5,
     }, playersList)
-    addCorner(10, card)
-    addStroke(THEME.BORDER, 1, 0.2, card)
+    addCorner(10, card); addStroke(THEME.BORDER, 1, 0.2, card)
 
     local avFrame = create("Frame", {
-        Size = UDim2.fromOffset(56, 56),
-        Position = UDim2.new(0, 10, 0, 10),
-        BackgroundColor3 = THEME.BG_CARD_HI,
-        BorderSizePixel = 0,
-        ClipsDescendants = true,
-        ZIndex = 6,
+        Size = UDim2.fromOffset(56, 56), Position = UDim2.new(0, 10, 0, 10),
+        BackgroundColor3 = THEME.BG_CARD_HI, BorderSizePixel = 0,
+        ClipsDescendants = true, ZIndex = 6,
     }, card)
-    addCorner(28, avFrame)
-    addStroke(THEME.P_BRIGHT, 1.5, 0.2, avFrame)
-
+    addCorner(28, avFrame); addStroke(THEME.P_BRIGHT, 1.5, 0.2, avFrame)
     local img = create("ImageLabel", {
-        Size = UDim2.fromScale(1, 1),
-        BackgroundTransparency = 1,
-        Image = "",
-        ScaleType = Enum.ScaleType.Crop,
-        ZIndex = 7,
+        Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1,
+        Image = "", ScaleType = Enum.ScaleType.Crop, ZIndex = 7,
     }, avFrame)
     pcall(function()
-        img.Image = string.format(
-            "rbxthumb://type=AvatarHeadShot&id=%d&w=150&h=150",
-            player.UserId
-        )
+        img.Image = string.format("rbxthumb://type=AvatarHeadShot&id=%d&w=150&h=150", player.UserId)
     end)
 
     local iX = 76
-
     create("TextLabel", {
-        Size = UDim2.new(1, -iX - 8, 0, 18),
-        Position = UDim2.new(0, iX, 0, 10),
-        BackgroundTransparency = 1,
-        Text = displayNameOf(player),
-        Font = FONT.Bold, TextSize = 13,
-        TextColor3 = THEME.TX_MAIN,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        TextTruncate = Enum.TextTruncate.AtEnd,
-        ZIndex = 6,
+        Size = UDim2.new(1, -iX - 8, 0, 18), Position = UDim2.new(0, iX, 0, 10),
+        BackgroundTransparency = 1, Text = displayNameOf(player),
+        Font = FONT.Bold, TextSize = 13, TextColor3 = THEME.TX_MAIN,
+        TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 6,
     }, card)
-
     create("TextLabel", {
-        Size = UDim2.new(1, -iX - 8, 0, 14),
-        Position = UDim2.new(0, iX, 0, 28),
-        BackgroundTransparency = 1,
-        Text = "@" .. player.Name,
-        Font = FONT.Regular, TextSize = 11,
-        TextColor3 = THEME.TX_DIM,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        TextTruncate = Enum.TextTruncate.AtEnd,
-        ZIndex = 6,
+        Size = UDim2.new(1, -iX - 8, 0, 14), Position = UDim2.new(0, iX, 0, 28),
+        BackgroundTransparency = 1, Text = "@" .. player.Name,
+        Font = FONT.Regular, TextSize = 11, TextColor3 = THEME.TX_DIM,
+        TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 6,
     }, card)
 
     local okAge, accountAge = pcall(function() return player.AccountAge end)
@@ -1419,205 +968,116 @@ local function buildPlayerCard(player, order)
         and (tostring(accountAge) .. " days") or "N/A"
 
     create("TextLabel", {
-        Size = UDim2.new(0, 100, 0, 14),
-        Position = UDim2.new(0, iX, 0, 46),
-        BackgroundTransparency = 1,
-        Text = "# " .. tostring(player.UserId),
-        Font = FONT.Medium, TextSize = 10,
-        TextColor3 = THEME.TX_SUBTLE,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        ZIndex = 6,
+        Size = UDim2.new(0, 100, 0, 14), Position = UDim2.new(0, iX, 0, 46),
+        BackgroundTransparency = 1, Text = "# " .. tostring(player.UserId),
+        Font = FONT.Medium, TextSize = 10, TextColor3 = THEME.TX_SUBTLE,
+        TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 6,
     }, card)
-
     create("TextLabel", {
-        Size = UDim2.new(1, -iX - 8, 0, 14),
-        Position = UDim2.new(0, iX, 0, 46),
-        BackgroundTransparency = 1,
-        Text = "◷  " .. ageText,
-        Font = FONT.Medium, TextSize = 10,
-        TextColor3 = THEME.TX_SUBTLE,
-        TextXAlignment = Enum.TextXAlignment.Right,
-        ZIndex = 6,
+        Size = UDim2.new(1, -iX - 8, 0, 14), Position = UDim2.new(0, iX, 0, 46),
+        BackgroundTransparency = 1, Text = "◷  " .. ageText,
+        Font = FONT.Medium, TextSize = 10, TextColor3 = THEME.TX_SUBTLE,
+        TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 6,
     }, card)
 
-    -- ═══ Spectate Button (يسار) ═══
     local specBtn = create("TextButton", {
-        Name = "SpectateBtn",
-        Size = UDim2.new(0.5, -13, 0, 28),
+        Name = "SpectateBtn", Size = UDim2.new(0.5, -13, 0, 28),
         Position = UDim2.new(0, 10, 1, -38),
         BackgroundColor3 = isSpectating and THEME.DANGER or THEME.P_MAIN,
-        BackgroundTransparency = 0.05,
-        AutoButtonColor = false,
+        BackgroundTransparency = 0.05, AutoButtonColor = false,
         Text = isSpectating and "◉  Stop" or "◉  Spectate",
-        Font = FONT.Bold, TextSize = 11,
-        TextColor3 = THEME.TX_MAIN,
-        TextScaled = true,
-        TextWrapped = false,
-        ZIndex = 7,
+        Font = FONT.Bold, TextSize = 11, TextColor3 = THEME.TX_MAIN,
+        TextScaled = true, TextWrapped = false, ZIndex = 7,
     }, card)
     addCorner(8, specBtn)
     create("UITextSizeConstraint", { MaxTextSize = 11, MinTextSize = 8 }, specBtn)
-    local specStroke = addStroke(
-        isSpectating and THEME.DANGER_HI or THEME.P_GLOW,
-        1.2, 0.25, specBtn
-    )
-
+    local specStroke = addStroke(isSpectating and THEME.DANGER_HI or THEME.P_GLOW, 1.2, 0.25, specBtn)
     spectateButtons[player] = { btn = specBtn, stroke = specStroke }
-
     specBtn.Destroying:Connect(function()
         if spectateButtons[player] and spectateButtons[player].btn == specBtn then
             spectateButtons[player] = nil
         end
     end)
-
     styleActionButton(specBtn, specStroke)
-    specBtn.MouseButton1Click:Connect(function()
-        startSpectating(player)
-    end)
+    specBtn.MouseButton1Click:Connect(function() startSpectating(player) end)
 
-    -- ═══ Teleport Button (يمين) ═══
     local tpBtn = create("TextButton", {
-        Name = "TeleportBtn",
-        Size = UDim2.new(0.5, -13, 0, 28),
+        Name = "TeleportBtn", Size = UDim2.new(0.5, -13, 0, 28),
         Position = UDim2.new(0.5, 3, 1, -38),
-        BackgroundColor3 = THEME.P_MAIN,
-        BackgroundTransparency = 0.05,
-        AutoButtonColor = false,
-        Text = "➤  Teleport",
-        Font = FONT.Bold, TextSize = 11,
-        TextColor3 = THEME.TX_MAIN,
-        TextScaled = true,
-        TextWrapped = false,
-        ZIndex = 7,
+        BackgroundColor3 = THEME.P_MAIN, BackgroundTransparency = 0.05,
+        AutoButtonColor = false, Text = "➤  Teleport",
+        Font = FONT.Bold, TextSize = 11, TextColor3 = THEME.TX_MAIN,
+        TextScaled = true, TextWrapped = false, ZIndex = 7,
     }, card)
     addCorner(8, tpBtn)
     create("UITextSizeConstraint", { MaxTextSize = 11, MinTextSize = 8 }, tpBtn)
     local tpStroke = addStroke(THEME.P_GLOW, 1.2, 0.25, tpBtn)
-
     styleActionButton(tpBtn, tpStroke)
-    tpBtn.MouseButton1Click:Connect(function()
-        teleportToPlayer(player, tpBtn)
-    end)
+    tpBtn.MouseButton1Click:Connect(function() teleportToPlayer(player, tpBtn) end)
 
     return card
 end
 
--- ── إعادة بناء القائمة (محمي ضد التراكب) ──
-local renderBusy = false
-local renderPending = false
-
+local renderBusy, renderPending = false, false
 local function renderPlayers(filter)
-    if renderBusy then
-        renderPending = true
-        return
-    end
+    if renderBusy then renderPending = true; return end
     renderBusy = true
-
     for _, child in ipairs(playersList:GetChildren()) do
-        if child:IsA("Frame") or child:IsA("TextLabel") then
-            child:Destroy()
-        end
+        if child:IsA("Frame") or child:IsA("TextLabel") then child:Destroy() end
     end
-
-    filter = tostring(filter or ""):lower()
-    filter = filter:gsub("^%s+", ""):gsub("%s+$", "")
-
+    filter = tostring(filter or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
     local list = Players:GetPlayers()
-    table.sort(list, function(a, b)
-        return a.Name:lower() < b.Name:lower()
-    end)
-
+    table.sort(list, function(a, b) return a.Name:lower() < b.Name:lower() end)
     local order = 0
     for _, p in ipairs(list) do
         local matches = filter == ""
             or p.Name:lower():find(filter, 1, true) ~= nil
             or p.DisplayName:lower():find(filter, 1, true) ~= nil
-
-        if matches then
-            order += 1
-            buildPlayerCard(p, order)
-        end
+        if matches then order += 1; buildPlayerCard(p, order) end
     end
-
     if order == 0 then
         create("TextLabel", {
-            Size = UDim2.new(1, 0, 0, 60),
-            BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 0, 60), BackgroundTransparency = 1,
             Text = "◌  No players match your search",
-            Font = FONT.Medium, TextSize = 12,
-            TextColor3 = THEME.TX_SUBTLE,
-            TextXAlignment = Enum.TextXAlignment.Center,
-            TextYAlignment = Enum.TextYAlignment.Center,
-            LayoutOrder = 0,
-            ZIndex = 5,
+            Font = FONT.Medium, TextSize = 12, TextColor3 = THEME.TX_SUBTLE,
+            TextXAlignment = Enum.TextXAlignment.Center, TextYAlignment = Enum.TextYAlignment.Center,
+            LayoutOrder = 0, ZIndex = 5,
         }, playersList)
     end
-
     renderBusy = false
-    if renderPending then
-        renderPending = false
-        renderPlayers(filter)
-    end
+    if renderPending then renderPending = false; renderPlayers(filter) end
 end
 
 local searchThread = nil
 searchBox:GetPropertyChangedSignal("Text"):Connect(function()
     clearBtn.Visible = searchBox.Text ~= ""
     if searchThread then pcall(task.cancel, searchThread) end
-    searchThread = task.delay(0.08, function()
-        searchThread = nil
-        renderPlayers(searchBox.Text)
-    end)
+    searchThread = task.delay(0.08, function() searchThread = nil; renderPlayers(searchBox.Text) end)
 end)
-
-clearBtn.MouseButton1Click:Connect(function()
-    searchBox.Text = ""
-    renderPlayers("")
-end)
-
+clearBtn.MouseButton1Click:Connect(function() searchBox.Text = ""; renderPlayers("") end)
 Players.PlayerAdded:Connect(function()
-    if currentTab == "players" then
-        task.wait(0.1)
-        renderPlayers(searchBox.Text)
-    end
+    if currentTab == "players" then task.wait(0.1); renderPlayers(searchBox.Text) end
 end)
-
 Players.PlayerRemoving:Connect(function()
-    if currentTab == "players" then
-        renderPlayers(searchBox.Text)
-    end
+    if currentTab == "players" then renderPlayers(searchBox.Text) end
 end)
 
 --==================================================================
--- 15) صفحة News
+-- 15) News
 --==================================================================
 local newsPage = createPage("news")
-
 local newsScroll = create("ScrollingFrame", {
-    Name = "NewsScroll",
-    Size = UDim2.fromScale(1, 1),
-    BackgroundTransparency = 1,
-    BorderSizePixel = 0,
-    ScrollBarThickness = 3,
-    ScrollBarImageColor3 = THEME.P_BRIGHT,
-    CanvasSize = UDim2.new(0, 0, 0, 0),
-    AutomaticCanvasSize = Enum.AutomaticSize.Y,
-    ZIndex = 4,
+    Name = "NewsScroll", Size = UDim2.fromScale(1, 1),
+    BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 3,
+    ScrollBarImageColor3 = THEME.P_BRIGHT, CanvasSize = UDim2.new(0, 0, 0, 0),
+    AutomaticCanvasSize = Enum.AutomaticSize.Y, ZIndex = 4,
 }, newsPage)
-create("UIListLayout", {
-    Padding = UDim.new(0, 8),
-    SortOrder = Enum.SortOrder.LayoutOrder,
-}, newsScroll)
-
+create("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder }, newsScroll)
 local newsHeader = create("TextLabel", {
-    Size = UDim2.new(1, 0, 0, 28),
-    BackgroundTransparency = 1,
-    Text = "✦  LATEST NEWS",
-    Font = FONT.Bold, TextSize = 14,
-    TextColor3 = THEME.TX_MAIN,
-    TextXAlignment = Enum.TextXAlignment.Left,
-    LayoutOrder = 0,
-    ZIndex = 5,
+    Size = UDim2.new(1, 0, 0, 28), BackgroundTransparency = 1,
+    Text = "✦  LATEST NEWS", Font = FONT.Bold, TextSize = 14,
+    TextColor3 = THEME.TX_MAIN, TextXAlignment = Enum.TextXAlignment.Left,
+    LayoutOrder = 0, ZIndex = 5,
 }, newsScroll)
 addGradient(newsHeader, {
     ColorSequenceKeypoint.new(0, THEME.P_GLOW),
@@ -1625,108 +1085,66 @@ addGradient(newsHeader, {
 }, 0)
 
 local NEWS_DATA = {
-    { title = "LYNEX HUB Launch",      body = "The first public release of LYNEX HUB is live. Enjoy the brand-new premium interface optimized for mobile.", date = "2025-01-15" },
-    { title = "Mobile Optimization",   body = "Touch-friendly controls, responsive layout, and smooth animations tuned for phones of all sizes.",          date = "2025-01-20" },
-    { title = "Player Profile Card",   body = "Home tab now displays your real Roblox avatar, display name, user id and account age.",                 date = "2025-01-24" },
+    { title = "LYNEX HUB Launch", body = "The first public release of LYNEX HUB is live. Enjoy the brand-new premium interface optimized for mobile.", date = "2025-01-15" },
+    { title = "Mobile Optimization", body = "Touch-friendly controls, responsive layout, and smooth animations tuned for phones of all sizes.", date = "2025-01-20" },
+    { title = "Player Profile Card", body = "Home tab now displays your real Roblox avatar, display name, user id and account age.", date = "2025-01-24" },
     { title = "Settings & Customization", body = "You can now toggle animations, adjust window transparency, and enable or disable the purple glow.", date = "2025-01-26" },
-    { title = "Players Tab & Blur",     body = "New Players tab with live search and player cards. A subtle blur effect now enhances the UI focus.",       date = "2025-02-01" },
-    { title = "Spectate System",        body = "New Spectate feature on Players tab lets you watch any player using the Roblox camera in real time.",          date = "2025-02-08" },
+    { title = "Players Tab & Blur", body = "New Players tab with live search and player cards. A subtle blur effect now enhances the UI focus.", date = "2025-02-01" },
+    { title = "Spectate System", body = "New Spectate feature on Players tab lets you watch any player using the Roblox camera in real time.", date = "2025-02-08" },
     { title = "Persistent Spectate Fix", body = "Spectate now persists after hiding the UI, supports all players, and handles respawns and disconnects reliably.", date = "2025-02-15" },
-    { title = "Teleport Button",        body = "New Teleport button next to Spectate lets you travel to any player — compliant with in-game movement rules.", date = "2025-02-22" },
+    { title = "Teleport Button", body = "New Teleport button next to Spectate lets you travel to any player — compliant with in-game movement rules.", date = "2025-02-22" },
+    { title = "Player Tab", body = "New Player tab with Movement, Special Movement and Visuals — speed, jump, flight, gravity, rotation, infinite jump, swimming, iPad view, invisible.", date = "2025-03-01" },
 }
-
 local newsCards = {}
 for i, item in ipairs(NEWS_DATA) do
     local card = create("Frame", {
-        Name = "News_" .. i,
-        Size = UDim2.new(1, 0, 0, 100),
-        BackgroundColor3 = THEME.BG_CARD,
-        BackgroundTransparency = 0.05,
-        BorderSizePixel = 0,
-        LayoutOrder = i,
-        ZIndex = 4,
+        Name = "News_" .. i, Size = UDim2.new(1, 0, 0, 100),
+        BackgroundColor3 = THEME.BG_CARD, BackgroundTransparency = 0.05,
+        BorderSizePixel = 0, LayoutOrder = i, ZIndex = 4,
     }, newsScroll)
-    addCorner(10, card)
-    addStroke(THEME.BORDER, 1, 0.2, card)
-
+    addCorner(10, card); addStroke(THEME.BORDER, 1, 0.2, card)
     local accent = create("Frame", {
-        Size = UDim2.new(0, 3, 1, -14),
-        Position = UDim2.new(0, 0, 0, 7),
-        BackgroundColor3 = THEME.P_BRIGHT,
-        BorderSizePixel = 0,
-        ZIndex = 5,
+        Size = UDim2.new(0, 3, 1, -14), Position = UDim2.new(0, 0, 0, 7),
+        BackgroundColor3 = THEME.P_BRIGHT, BorderSizePixel = 0, ZIndex = 5,
     }, card)
     addCorner(2, accent)
-
     create("TextLabel", {
-        Size = UDim2.new(1, -22, 0, 18),
-        Position = UDim2.new(0, 12, 0, 7),
-        BackgroundTransparency = 1,
-        Text = item.title,
-        Font = FONT.Bold, TextSize = 12,
-        TextColor3 = THEME.TX_MAIN,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        TextTruncate = Enum.TextTruncate.AtEnd,
-        ZIndex = 5,
+        Size = UDim2.new(1, -22, 0, 18), Position = UDim2.new(0, 12, 0, 7),
+        BackgroundTransparency = 1, Text = item.title, Font = FONT.Bold, TextSize = 12,
+        TextColor3 = THEME.TX_MAIN, TextXAlignment = Enum.TextXAlignment.Left,
+        TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 5,
     }, card)
-
     create("TextLabel", {
-        Size = UDim2.new(1, -22, 0, 40),
-        Position = UDim2.new(0, 12, 0, 27),
-        BackgroundTransparency = 1,
-        Text = item.body,
-        Font = FONT.Regular, TextSize = 11,
-        TextColor3 = THEME.TX_DIM,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        TextYAlignment = Enum.TextYAlignment.Top,
-        TextWrapped = true,
-        ZIndex = 5,
+        Size = UDim2.new(1, -22, 0, 40), Position = UDim2.new(0, 12, 0, 27),
+        BackgroundTransparency = 1, Text = item.body, Font = FONT.Regular, TextSize = 11,
+        TextColor3 = THEME.TX_DIM, TextXAlignment = Enum.TextXAlignment.Left,
+        TextYAlignment = Enum.TextYAlignment.Top, TextWrapped = true, ZIndex = 5,
     }, card)
-
     create("TextLabel", {
-        Size = UDim2.new(1, -22, 0, 14),
-        Position = UDim2.new(0, 12, 1, -18),
-        BackgroundTransparency = 1,
-        Text = "◷  " .. item.date,
-        Font = FONT.Medium, TextSize = 10,
-        TextColor3 = THEME.P_GLOW,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        ZIndex = 5,
+        Size = UDim2.new(1, -22, 0, 14), Position = UDim2.new(0, 12, 1, -18),
+        BackgroundTransparency = 1, Text = "◷  " .. item.date, Font = FONT.Medium, TextSize = 10,
+        TextColor3 = THEME.P_GLOW, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 5,
     }, card)
-
     table.insert(newsCards, card)
 end
 
 --==================================================================
--- 16) صفحة Settings
+-- 16) Settings (helpers included)
 --==================================================================
 local settingsPage = createPage("settings")
-
 local settingsScroll = create("ScrollingFrame", {
-    Name = "SettingsScroll",
-    Size = UDim2.fromScale(1, 1),
-    BackgroundTransparency = 1,
-    BorderSizePixel = 0,
-    ScrollBarThickness = 3,
-    ScrollBarImageColor3 = THEME.P_BRIGHT,
-    CanvasSize = UDim2.new(0, 0, 0, 0),
-    AutomaticCanvasSize = Enum.AutomaticSize.Y,
-    ZIndex = 4,
+    Name = "SettingsScroll", Size = UDim2.fromScale(1, 1),
+    BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 3,
+    ScrollBarImageColor3 = THEME.P_BRIGHT, CanvasSize = UDim2.new(0, 0, 0, 0),
+    AutomaticCanvasSize = Enum.AutomaticSize.Y, ZIndex = 4,
 }, settingsPage)
-create("UIListLayout", {
-    Padding = UDim.new(0, 8),
-    SortOrder = Enum.SortOrder.LayoutOrder,
-}, settingsScroll)
+create("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder }, settingsScroll)
 
 local settingsHeader = create("TextLabel", {
-    Size = UDim2.new(1, 0, 0, 28),
-    BackgroundTransparency = 1,
-    Text = "✦  SETTINGS",
-    Font = FONT.Bold, TextSize = 14,
-    TextColor3 = THEME.TX_MAIN,
-    TextXAlignment = Enum.TextXAlignment.Left,
-    LayoutOrder = 0,
-    ZIndex = 5,
+    Size = UDim2.new(1, 0, 0, 28), BackgroundTransparency = 1,
+    Text = "✦  SETTINGS", Font = FONT.Bold, TextSize = 14,
+    TextColor3 = THEME.TX_MAIN, TextXAlignment = Enum.TextXAlignment.Left,
+    LayoutOrder = 0, ZIndex = 5,
 }, settingsScroll)
 addGradient(settingsHeader, {
     ColorSequenceKeypoint.new(0, THEME.P_GLOW),
@@ -1735,220 +1153,677 @@ addGradient(settingsHeader, {
 
 local function createToggleRow(parent, order, labelText, initialValue, onChange)
     local row = create("Frame", {
-        Size = UDim2.new(1, 0, 0, 48),
-        BackgroundColor3 = THEME.BG_CARD,
-        BackgroundTransparency = 0.05,
-        BorderSizePixel = 0,
-        LayoutOrder = order,
-        ZIndex = 4,
+        Size = UDim2.new(1, 0, 0, 48), BackgroundColor3 = THEME.BG_CARD,
+        BackgroundTransparency = 0.05, BorderSizePixel = 0,
+        LayoutOrder = order, ZIndex = 4,
     }, parent)
-    addCorner(10, row)
-    addStroke(THEME.BORDER, 1, 0.2, row)
-
+    addCorner(10, row); addStroke(THEME.BORDER, 1, 0.2, row)
     create("TextLabel", {
-        Size = UDim2.new(1, -76, 1, 0),
-        Position = UDim2.new(0, 12, 0, 0),
-        BackgroundTransparency = 1,
-        Text = labelText,
-        Font = FONT.Medium, TextSize = 12,
-        TextColor3 = THEME.TX_MAIN,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        ZIndex = 5,
+        Size = UDim2.new(1, -76, 1, 0), Position = UDim2.new(0, 12, 0, 0),
+        BackgroundTransparency = 1, Text = labelText, Font = FONT.Medium, TextSize = 12,
+        TextColor3 = THEME.TX_MAIN, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 5,
     }, row)
-
     local toggle = create("TextButton", {
-        Size = UDim2.fromOffset(44, 22),
-        Position = UDim2.new(1, -56, 0.5, -11),
+        Size = UDim2.fromOffset(44, 22), Position = UDim2.new(1, -56, 0.5, -11),
         BackgroundColor3 = initialValue and THEME.P_MAIN or THEME.BG_CARD_HI,
-        AutoButtonColor = false,
-        Text = "",
-        ZIndex = 5,
+        AutoButtonColor = false, Text = "", ZIndex = 5,
     }, row)
     addCorner(11, toggle)
-
     local knob = create("Frame", {
         Size = UDim2.fromOffset(16, 16),
         Position = initialValue and UDim2.new(1, -19, 0.5, -8) or UDim2.new(0, 3, 0.5, -8),
-        BackgroundColor3 = THEME.TX_MAIN,
-        BorderSizePixel = 0,
-        ZIndex = 6,
+        BackgroundColor3 = THEME.TX_MAIN, BorderSizePixel = 0, ZIndex = 6,
     }, toggle)
     addCorner(8, knob)
-
     local isOn = initialValue
     local function setOn(v, fire)
         isOn = v
-        tween(toggle, TweenInfo.new(0.18), {
-            BackgroundColor3 = v and THEME.P_MAIN or THEME.BG_CARD_HI,
-        })
+        tween(toggle, TweenInfo.new(0.18), { BackgroundColor3 = v and THEME.P_MAIN or THEME.BG_CARD_HI })
         tween(knob, TweenInfo.new(0.18), {
-            Position = v and UDim2.new(1, -19, 0.5, -8) or UDim2.new(0, 3, 0.5, -8),
+            Position = v and UDim2.new(1, -19, 0.5, -8) or UDim2.new(0, 3, 0.5, -8)
         })
         if fire and onChange then onChange(v) end
     end
-
-    toggle.MouseButton1Click:Connect(function()
-        setOn(not isOn, true)
-    end)
-
+    toggle.MouseButton1Click:Connect(function() setOn(not isOn, true) end)
     return { setOn = function(v) setOn(v, false) end, get = function() return isOn end }
 end
 
 local function createSliderRow(parent, order, labelText, initialValue, onChange)
     local row = create("Frame", {
-        Size = UDim2.new(1, 0, 0, 56),
-        BackgroundColor3 = THEME.BG_CARD,
-        BackgroundTransparency = 0.05,
-        BorderSizePixel = 0,
-        LayoutOrder = order,
-        ZIndex = 4,
+        Size = UDim2.new(1, 0, 0, 56), BackgroundColor3 = THEME.BG_CARD,
+        BackgroundTransparency = 0.05, BorderSizePixel = 0,
+        LayoutOrder = order, ZIndex = 4,
     }, parent)
-    addCorner(10, row)
-    addStroke(THEME.BORDER, 1, 0.2, row)
-
+    addCorner(10, row); addStroke(THEME.BORDER, 1, 0.2, row)
     create("TextLabel", {
-        Size = UDim2.new(1, -56, 0, 18),
-        Position = UDim2.new(0, 12, 0, 7),
-        BackgroundTransparency = 1,
-        Text = labelText,
-        Font = FONT.Medium, TextSize = 12,
-        TextColor3 = THEME.TX_MAIN,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        ZIndex = 5,
+        Size = UDim2.new(1, -56, 0, 18), Position = UDim2.new(0, 12, 0, 7),
+        BackgroundTransparency = 1, Text = labelText, Font = FONT.Medium, TextSize = 12,
+        TextColor3 = THEME.TX_MAIN, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 5,
     }, row)
-
     local valueLbl = create("TextLabel", {
-        Size = UDim2.fromOffset(42, 18),
-        Position = UDim2.new(1, -50, 0, 7),
-        BackgroundTransparency = 1,
-        Text = tostring(initialValue) .. "%",
-        Font = FONT.Bold, TextSize = 12,
-        TextColor3 = THEME.P_GLOW,
-        TextXAlignment = Enum.TextXAlignment.Right,
-        ZIndex = 5,
+        Size = UDim2.fromOffset(42, 18), Position = UDim2.new(1, -50, 0, 7),
+        BackgroundTransparency = 1, Text = tostring(initialValue) .. "%",
+        Font = FONT.Bold, TextSize = 12, TextColor3 = THEME.P_GLOW,
+        TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 5,
     }, row)
-
     local hitbox = create("Frame", {
-        Size = UDim2.new(1, -24, 0, 26),
-        Position = UDim2.new(0, 12, 0, 24),
-        BackgroundTransparency = 1,
-        ZIndex = 5,
+        Size = UDim2.new(1, -24, 0, 26), Position = UDim2.new(0, 12, 0, 24),
+        BackgroundTransparency = 1, ZIndex = 5,
     }, row)
-
     local bar = create("Frame", {
-        Size = UDim2.new(1, 0, 0, 8),
-        Position = UDim2.new(0, 0, 0.5, -4),
-        BackgroundColor3 = THEME.BG_CARD_HI,
-        BorderSizePixel = 0,
-        ZIndex = 5,
+        Size = UDim2.new(1, 0, 0, 8), Position = UDim2.new(0, 0, 0.5, -4),
+        BackgroundColor3 = THEME.BG_CARD_HI, BorderSizePixel = 0, ZIndex = 5,
     }, hitbox)
     addCorner(4, bar)
-
     local fill = create("Frame", {
         Size = UDim2.new(initialValue / 100, 0, 1, 0),
-        BackgroundColor3 = THEME.P_BRIGHT,
-        BorderSizePixel = 0,
-        ZIndex = 6,
+        BackgroundColor3 = THEME.P_BRIGHT, BorderSizePixel = 0, ZIndex = 6,
     }, bar)
     addCorner(4, fill)
-
     local knob = create("Frame", {
         Size = UDim2.fromOffset(18, 18),
         Position = UDim2.new(initialValue / 100, -9, 0.5, -9),
-        BackgroundColor3 = THEME.TX_MAIN,
-        BorderSizePixel = 0,
-        ZIndex = 7,
+        BackgroundColor3 = THEME.TX_MAIN, BorderSizePixel = 0, ZIndex = 7,
     }, bar)
-    addCorner(9, knob)
-    addStroke(THEME.P_GLOW, 1.5, 0, knob)
-
+    addCorner(9, knob); addStroke(THEME.P_GLOW, 1.5, 0, knob)
     local current = initialValue
     local dragging = false
-
     local function apply(v, fire)
-        v = math.clamp(math.floor(v + 0.5), 0, 90)
-        current = v
+        v = math.clamp(math.floor(v + 0.5), 0, 90); current = v
         tween(fill, TweenInfo.new(0.08), { Size = UDim2.new(v / 100, 0, 1, 0) })
         tween(knob, TweenInfo.new(0.08), { Position = UDim2.new(v / 100, -9, 0.5, -9) })
         valueLbl.Text = v .. "%"
         if fire and onChange then onChange(v) end
     end
-
     local function fromInput(input)
-        local pos = bar.AbsolutePosition
-        local size = bar.AbsoluteSize
+        local pos, size = bar.AbsolutePosition, bar.AbsoluteSize
         if size.X <= 0 then return end
-        local rel = (input.Position.X - pos.X) / size.X
-        apply(rel * 100, true)
+        apply(math.clamp((input.Position.X - pos.X) / size.X, 0, 1) * 100, true)
     end
-
     hitbox.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1
            or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
-            fromInput(input)
+            dragging = true; fromInput(input)
         end
     end)
-
     UserInputService.InputChanged:Connect(function(input)
         if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
-           or input.UserInputType == Enum.UserInputType.Touch) then
-            fromInput(input)
-        end
+           or input.UserInputType == Enum.UserInputType.Touch) then fromInput(input) end
     end)
-
     UserInputService.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1
-           or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = false
-        end
+           or input.UserInputType == Enum.UserInputType.Touch then dragging = false end
     end)
-
     return { setValue = function(v) apply(v, false) end, get = function() return current end }
 end
 
 local animRow = createToggleRow(settingsScroll, 1, "Animations", settings.animations, function(v)
     settings.animations = v
 end)
-
 local glowRow = createToggleRow(settingsScroll, 2, "Purple Glow", settings.glow, function(v)
-    settings.glow = v
-    applyGlowState()
+    settings.glow = v; applyGlowState()
 end)
-
 local transRow = createSliderRow(settingsScroll, 3, "Window Transparency", settings.transparency, function(v)
     applyWindowTransparency(v)
 end)
-
 local resetBtn = create("TextButton", {
-    Size = UDim2.new(1, 0, 0, 42),
-    BackgroundColor3 = THEME.BG_CARD,
-    AutoButtonColor = false,
-    Text = "↻  RESET TO DEFAULTS",
-    Font = FONT.Bold, TextSize = 12,
-    TextColor3 = THEME.DANGER_HI,
-    LayoutOrder = 4,
-    ZIndex = 4,
+    Size = UDim2.new(1, 0, 0, 42), BackgroundColor3 = THEME.BG_CARD,
+    AutoButtonColor = false, Text = "↻  RESET TO DEFAULTS",
+    Font = FONT.Bold, TextSize = 12, TextColor3 = THEME.DANGER_HI,
+    LayoutOrder = 4, ZIndex = 4,
 }, settingsScroll)
-addCorner(10, resetBtn)
-addStroke(THEME.DANGER, 1.2, 0.15, resetBtn)
+addCorner(10, resetBtn); addStroke(THEME.DANGER, 1.2, 0.15, resetBtn)
 
 --==================================================================
--- 17) الزر العائم + شارة Spectate
+-- 16.5) Player Page  ◀️ جديد
+--==================================================================
+local playerPage = createPage("player", true)
+create("UIListLayout", { Padding = UDim.new(0, 10), SortOrder = Enum.SortOrder.LayoutOrder }, playerPage)
+create("UIPadding", {
+    PaddingTop = UDim.new(0, 2), PaddingBottom = UDim.new(0, 10), PaddingRight = UDim.new(0, 6),
+}, playerPage)
+
+-- ── Player State ──
+local playerState = {
+    speed = { applied = false, value = 16, original = 16 },
+    jump = { applied = false, value = 50, original = 50 },
+    flight = { active = false, speed = 60, bodyVel = nil, conn = nil },
+    gravity = { applied = false, value = 196.2, original = 196.2 },
+    rotation = { active = false, speed = 10, bodyAV = nil },
+    infiniteJump = { active = false, conn = nil },
+    swimming = { active = false, bodyForce = nil },
+    ipadView = { active = false, originalFov = nil },
+    invisible = { active = false, originals = {} },
+}
+
+-- ── Helper: Range Slider (custom min/max) ──
+local function createRangeSlider(parent, order, labelText, minV, maxV, initialValue, onChange)
+    local row = create("Frame", {
+        Size = UDim2.new(1, 0, 0, 62), BackgroundColor3 = THEME.BG_CARD,
+        BackgroundTransparency = 0.05, BorderSizePixel = 0,
+        LayoutOrder = order, ZIndex = 4,
+    }, parent)
+    addCorner(10, row); addStroke(THEME.BORDER, 1, 0.2, row)
+    create("TextLabel", {
+        Size = UDim2.new(1, -70, 0, 18), Position = UDim2.new(0, 12, 0, 7),
+        BackgroundTransparency = 1, Text = labelText, Font = FONT.Medium, TextSize = 12,
+        TextColor3 = THEME.TX_MAIN, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 5,
+    }, row)
+    local valueLbl = create("TextLabel", {
+        Size = UDim2.fromOffset(56, 18), Position = UDim2.new(1, -60, 0, 7),
+        BackgroundTransparency = 1, Text = tostring(initialValue),
+        Font = FONT.Bold, TextSize = 12, TextColor3 = THEME.P_GLOW,
+        TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 5,
+    }, row)
+    local hitbox = create("Frame", {
+        Size = UDim2.new(1, -24, 0, 26), Position = UDim2.new(0, 12, 0, 30),
+        BackgroundTransparency = 1, ZIndex = 5,
+    }, row)
+    local bar = create("Frame", {
+        Size = UDim2.new(1, 0, 0, 8), Position = UDim2.new(0, 0, 0.5, -4),
+        BackgroundColor3 = THEME.BG_CARD_HI, BorderSizePixel = 0, ZIndex = 5,
+    }, hitbox)
+    addCorner(4, bar)
+    local initialRel = (initialValue - minV) / (maxV - minV)
+    local fill = create("Frame", {
+        Size = UDim2.new(initialRel, 0, 1, 0),
+        BackgroundColor3 = THEME.P_BRIGHT, BorderSizePixel = 0, ZIndex = 6,
+    }, bar)
+    addCorner(4, fill)
+    local knob = create("Frame", {
+        Size = UDim2.fromOffset(18, 18),
+        Position = UDim2.new(initialRel, -9, 0.5, -9),
+        BackgroundColor3 = THEME.TX_MAIN, BorderSizePixel = 0, ZIndex = 7,
+    }, bar)
+    addCorner(9, knob); addStroke(THEME.P_GLOW, 1.5, 0, knob)
+    local current = initialValue
+    local dragging = false
+    local function apply(v, fire)
+        v = math.clamp(v, minV, maxV)
+        v = math.floor(v + 0.5)
+        current = v
+        local rel = (v - minV) / (maxV - minV)
+        tween(fill, TweenInfo.new(0.08), { Size = UDim2.new(rel, 0, 1, 0) })
+        tween(knob, TweenInfo.new(0.08), { Position = UDim2.new(rel, -9, 0.5, -9) })
+        valueLbl.Text = tostring(v)
+        if fire and onChange then onChange(v) end
+    end
+    local function fromInput(input)
+        local pos, size = bar.AbsolutePosition, bar.AbsoluteSize
+        if size.X <= 0 then return end
+        local rel = math.clamp((input.Position.X - pos.X) / size.X, 0, 1)
+        apply(minV + rel * (maxV - minV), true)
+    end
+    hitbox.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+           or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true; fromInput(input)
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
+           or input.UserInputType == Enum.UserInputType.Touch) then fromInput(input) end
+    end)
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+           or input.UserInputType == Enum.UserInputType.Touch then dragging = false end
+    end)
+    return { setValue = function(v) apply(v, false) end, get = function() return current end }
+end
+
+-- ── Helper: Toggle Button (larger, card form) ──
+local function createPlayerToggle(parent, order, titleText, subtitleText, initial, onChange)
+    local card = create("Frame", {
+        Size = UDim2.new(1, 0, 0, 58), BackgroundColor3 = THEME.BG_CARD,
+        BackgroundTransparency = 0.05, BorderSizePixel = 0,
+        LayoutOrder = order, ZIndex = 4,
+    }, parent)
+    addCorner(10, card); addStroke(THEME.BORDER, 1, 0.2, card)
+    create("TextLabel", {
+        Size = UDim2.new(1, -76, 0, 20), Position = UDim2.new(0, 12, 0, 8),
+        BackgroundTransparency = 1, Text = titleText, Font = FONT.Bold, TextSize = 12,
+        TextColor3 = THEME.TX_MAIN, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 5,
+    }, card)
+    if subtitleText and subtitleText ~= "" then
+        create("TextLabel", {
+            Size = UDim2.new(1, -76, 0, 14), Position = UDim2.new(0, 12, 0, 28),
+            BackgroundTransparency = 1, Text = subtitleText, Font = FONT.Regular, TextSize = 10,
+            TextColor3 = THEME.TX_SUBTLE, TextXAlignment = Enum.TextXAlignment.Left,
+            TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 5,
+        }, card)
+    end
+    local toggle = create("TextButton", {
+        Size = UDim2.fromOffset(48, 24), Position = UDim2.new(1, -60, 0.5, -12),
+        BackgroundColor3 = initial and THEME.P_MAIN or THEME.BG_CARD_HI,
+        AutoButtonColor = false, Text = "", ZIndex = 5,
+    }, card)
+    addCorner(12, toggle)
+    local knob = create("Frame", {
+        Size = UDim2.fromOffset(18, 18),
+        Position = initial and UDim2.new(1, -21, 0.5, -9) or UDim2.new(0, 3, 0.5, -9),
+        BackgroundColor3 = THEME.TX_MAIN, BorderSizePixel = 0, ZIndex = 6,
+    }, toggle)
+    addCorner(9, knob)
+    local isOn = initial
+    local function setOn(v, fire)
+        isOn = v
+        tween(toggle, TweenInfo.new(0.18), { BackgroundColor3 = v and THEME.P_MAIN or THEME.BG_CARD_HI })
+        tween(knob, TweenInfo.new(0.18), {
+            Position = v and UDim2.new(1, -21, 0.5, -9) or UDim2.new(0, 3, 0.5, -9)
+        })
+        if fire and onChange then onChange(v) end
+    end
+    toggle.MouseButton1Click:Connect(function() setOn(not isOn, true) end)
+    return { setOn = function(v) setOn(v, false) end, get = function() return isOn end }
+end
+
+-- ── Helper: small action buttons row ──
+local function createActionButtons(parent, order, applyLabel, applyColor, onApply, onReset)
+    local row = create("Frame", {
+        Size = UDim2.new(1, 0, 0, 32), BackgroundTransparency = 1,
+        LayoutOrder = order, ZIndex = 4,
+    }, parent)
+    local applyBtn = create("TextButton", {
+        Size = UDim2.new(0.5, -4, 1, 0), Position = UDim2.new(0, 0, 0, 0),
+        BackgroundColor3 = applyColor, AutoButtonColor = false,
+        Text = applyLabel, Font = FONT.Bold, TextSize = 11, TextColor3 = THEME.TX_MAIN, ZIndex = 5,
+    }, row)
+    addCorner(8, applyBtn)
+    local applyStroke = addStroke(THEME.P_GLOW, 1, 0.3, applyBtn)
+    styleActionButton(applyBtn, applyStroke)
+    applyBtn.MouseButton1Click:Connect(onApply)
+    local resetB = create("TextButton", {
+        Size = UDim2.new(0.5, -4, 1, 0), Position = UDim2.new(0.5, 4, 0, 0),
+        BackgroundColor3 = THEME.BG_CARD_HI, AutoButtonColor = false,
+        Text = "↻  Reset", Font = FONT.Bold, TextSize = 11,
+        TextColor3 = THEME.DANGER_HI, ZIndex = 5,
+    }, row)
+    addCorner(8, resetB)
+    local resetStroke = addStroke(THEME.DANGER, 1, 0.3, resetB)
+    styleActionButton(resetB, resetStroke)
+    resetB.MouseButton1Click:Connect(onReset)
+end
+
+-- ── Helper: section header ──
+local function addSectionHeader(text, order)
+    local lbl = create("TextLabel", {
+        Size = UDim2.new(1, 0, 0, 22), BackgroundTransparency = 1,
+        Text = "✦  " .. text, Font = FONT.Bold, TextSize = 12,
+        TextColor3 = THEME.P_GLOW, TextXAlignment = Enum.TextXAlignment.Left,
+        LayoutOrder = order, ZIndex = 5,
+    }, playerPage)
+    return lbl
+end
+
+-- ── UI Order counter ──
+local uiOrder = 0
+local function nextOrder() uiOrder += 1; return uiOrder end
+
+-- ═══════════════════════════════════════════════════════
+-- MOVEMENT SECTION
+-- ═══════════════════════════════════════════════════════
+addSectionHeader("MOVEMENT", nextOrder())
+
+-- Speed Slider
+local speedSlider = createRangeSlider(playerPage, nextOrder(), "◉ Speed", 16, 500, playerState.speed.value, function(v)
+    playerState.speed.value = v
+    if playerState.speed.applied then
+        local hum = getHumanoid(localPlayer)
+        if hum then hum.WalkSpeed = v end
+    end
+end)
+createActionButtons(playerPage, nextOrder(), "Apply  ✓", THEME.P_MAIN, function()
+    local hum = getHumanoid(localPlayer)
+    if hum then
+        hum.WalkSpeed = playerState.speed.value
+        playerState.speed.applied = true
+        showToast("◉  Speed applied: " .. playerState.speed.value)
+    else
+        showToast("◉  Character not ready")
+    end
+end, function()
+    playerState.speed.value = playerState.speed.original
+    speedSlider.setValue(playerState.speed.original)
+    local hum = getHumanoid(localPlayer)
+    if hum then hum.WalkSpeed = playerState.speed.original end
+    playerState.speed.applied = false
+    showToast("↻  Speed reset")
+end)
+
+-- Jump Slider
+local jumpSlider = createRangeSlider(playerPage, nextOrder(), "◈ Jump Power", 50, 500, playerState.jump.value, function(v)
+    playerState.jump.value = v
+    if playerState.jump.applied then
+        local hum = getHumanoid(localPlayer)
+        if hum then
+            hum.UseJumpPower = true
+            hum.JumpPower = v
+        end
+    end
+end)
+createActionButtons(playerPage, nextOrder(), "Apply  ✓", THEME.P_MAIN, function()
+    local hum = getHumanoid(localPlayer)
+    if hum then
+        hum.UseJumpPower = true
+        hum.JumpPower = playerState.jump.value
+        playerState.jump.applied = true
+        showToast("◈  Jump applied: " .. playerState.jump.value)
+    else
+        showToast("◈  Character not ready")
+    end
+end, function()
+    playerState.jump.value = playerState.jump.original
+    jumpSlider.setValue(playerState.jump.original)
+    local hum = getHumanoid(localPlayer)
+    if hum then
+        hum.UseJumpPower = true
+        hum.JumpPower = playerState.jump.original
+    end
+    playerState.jump.applied = false
+    showToast("↻  Jump reset")
+end)
+
+-- Flight Card
+local flightToggle = createPlayerToggle(playerPage, nextOrder(), "◈ Flight", "Hover & fly toward camera look", false, function(v)
+    playerState.flight.active = v
+    if v then
+        local char = localPlayer.Character
+        if not char then showToast("◈  Character not ready"); return end
+        local root = char:FindFirstChild("HumanoidRootPart")
+        if not root then return end
+        if playerState.flight.bodyVel then
+            pcall(function() playerState.flight.bodyVel:Destroy() end)
+        end
+        local bv = Instance.new("BodyVelocity")
+        bv.Name = "LYNEX_Flight"
+        bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+        bv.Velocity = Vector3.zero
+        bv.Parent = root
+        playerState.flight.bodyVel = bv
+        playerState.flight.conn = RunService.RenderStepped:Connect(function()
+            if not playerState.flight.active then return end
+            local c = localPlayer.Character
+            local h = c and c:FindFirstChildOfClass("Humanoid")
+            local r = c and c:FindFirstChild("HumanoidRootPart")
+            if not (h and r and bv.Parent) then return end
+            local md = h.MoveDirection
+            if md.Magnitude > 0.01 then
+                local cam = workspace.CurrentCamera
+                if cam then
+                    local look = cam.CFrame.LookVector
+                    bv.Velocity = look * playerState.flight.speed
+                end
+            else
+                bv.Velocity = Vector3.zero
+            end
+        end)
+        showToast("◈  Flight ON — move joystick to fly")
+    else
+        if playerState.flight.conn then
+            pcall(function() playerState.flight.conn:Disconnect() end)
+            playerState.flight.conn = nil
+        end
+        if playerState.flight.bodyVel then
+            pcall(function() playerState.flight.bodyVel:Destroy() end)
+            playerState.flight.bodyVel = nil
+        end
+        showToast("◈  Flight OFF")
+    end
+end)
+local flightSpeedSlider = createRangeSlider(playerPage, nextOrder(), "↝ Flight Speed", 10, 300, playerState.flight.speed, function(v)
+    playerState.flight.speed = v
+end)
+
+-- Gravity Slider
+local gravitySlider = createRangeSlider(playerPage, nextOrder(), "◉ Gravity", 0, 196, math.floor(playerState.gravity.original), function(v)
+    playerState.gravity.value = v
+    playerState.gravity.applied = true
+    workspace.Gravity = v
+end)
+createActionButtons(playerPage, nextOrder(), "Apply  ✓", THEME.P_MAIN, function()
+    workspace.Gravity = playerState.gravity.value
+    playerState.gravity.applied = true
+    showToast("◉  Gravity: " .. playerState.gravity.value)
+end, function()
+    playerState.gravity.value = playerState.gravity.original
+    workspace.Gravity = playerState.gravity.original
+    gravitySlider.setValue(math.floor(playerState.gravity.original))
+    playerState.gravity.applied = false
+    showToast("↻  Gravity reset")
+end)
+
+-- Rotation Card
+local rotationToggle = createPlayerToggle(playerPage, nextOrder(), "◈ Rotation", "Spin your character in place", false, function(v)
+    playerState.rotation.active = v
+    local char = localPlayer.Character
+    if playerState.rotation.bodyAV then
+        pcall(function() playerState.rotation.bodyAV:Destroy() end)
+        playerState.rotation.bodyAV = nil
+    end
+    if v then
+        if not char then showToast("◈  Character not ready"); return end
+        local root = char:FindFirstChild("HumanoidRootPart")
+        if not root then return end
+        local av = Instance.new("BodyAngularVelocity")
+        av.Name = "LYNEX_Rotation"
+        av.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+        av.AngularVelocity = Vector3.new(0, playerState.rotation.speed, 0)
+        av.Parent = root
+        playerState.rotation.bodyAV = av
+        showToast("◈  Rotation ON")
+    else
+        showToast("◈  Rotation OFF")
+    end
+end)
+local rotationSpeedSlider = createRangeSlider(playerPage, nextOrder(), "↻ Rotation Speed", 1, 50, playerState.rotation.speed, function(v)
+    playerState.rotation.speed = v
+    if playerState.rotation.bodyAV and playerState.rotation.bodyAV.Parent then
+        playerState.rotation.bodyAV.AngularVelocity = Vector3.new(0, v, 0)
+    end
+end)
+
+-- ═══════════════════════════════════════════════════════
+-- SPECIAL MOVEMENT SECTION
+-- ═══════════════════════════════════════════════════════
+addSectionHeader("SPECIAL MOVEMENT", nextOrder())
+
+local infiniteJumpToggle = createPlayerToggle(playerPage, nextOrder(), "◈ Infinite Jump", "Jump repeatedly while holding space", false, function(v)
+    playerState.infiniteJump.active = v
+    if v then
+        if playerState.infiniteJump.conn then
+            pcall(function() playerState.infiniteJump.conn:Disconnect() end)
+            playerState.infiniteJump.conn = nil
+        end
+        playerState.infiniteJump.conn = UserInputService.JumpRequest:Connect(function()
+            if not playerState.infiniteJump.active then return end
+            local hum = getHumanoid(localPlayer)
+            if hum and hum.Health > 0 then
+                hum:ChangeState(Enum.HumanoidStateType.Jumping)
+            end
+        end)
+        showToast("◈  Infinite Jump ON")
+    else
+        if playerState.infiniteJump.conn then
+            pcall(function() playerState.infiniteJump.conn:Disconnect() end)
+            playerState.infiniteJump.conn = nil
+        end
+        showToast("◈  Infinite Jump OFF")
+    end
+end)
+
+local swimmingToggle = createPlayerToggle(playerPage, nextOrder(), "◈ Swimming", "Float in the air (local only)", false, function(v)
+    playerState.swimming.active = v
+    if playerState.swimming.bodyForce then
+        pcall(function() playerState.swimming.bodyForce:Destroy() end)
+        playerState.swimming.bodyForce = nil
+    end
+    if v then
+        local char = localPlayer.Character
+        if not char then showToast("◈  Character not ready"); return end
+        local root = char:FindFirstChild("HumanoidRootPart")
+        if not root then return end
+        local bf = Instance.new("BodyForce")
+        bf.Name = "LYNEX_Swim"
+        bf.Force = Vector3.new(0, root.AssemblyMass * workspace.Gravity, 0)
+        bf.Parent = root
+        playerState.swimming.bodyForce = bf
+        showToast("◈  Swimming ON")
+    else
+        showToast("◈  Swimming OFF")
+    end
+end)
+
+-- ═══════════════════════════════════════════════════════
+-- VISUALS SECTION
+-- ═══════════════════════════════════════════════════════
+addSectionHeader("VISUALS", nextOrder())
+
+local ipadToggle = createPlayerToggle(playerPage, nextOrder(), "▣ iPad View", "Wider camera FOV (local only)", false, function(v)
+    playerState.ipadView.active = v
+    local cam = workspace.CurrentCamera
+    if not cam then return end
+    if v then
+        playerState.ipadView.originalFov = cam.FieldOfView
+        cam.FieldOfView = 80
+        showToast("▣  iPad View ON (FOV 80)")
+    else
+        cam.FieldOfView = playerState.ipadView.originalFov or 70
+        showToast("▣  iPad View OFF")
+    end
+end)
+
+local invisibleToggle = createPlayerToggle(playerPage, nextOrder(), "◈ Invisible", "Local only — others still see you", false, function(v)
+    playerState.invisible.active = v
+    local char = localPlayer.Character
+    if not char then return end
+    if v then
+        playerState.invisible.originals = {}
+        for _, part in ipairs(char:GetDescendants()) do
+            if part:IsA("BasePart") then
+                playerState.invisible.originals[part] = part.Transparency
+                part.Transparency = 1
+            end
+        end
+        showToast("◈  Invisible ON (local only)")
+    else
+        for part, orig in pairs(playerState.invisible.originals) do
+            if part and part.Parent then part.Transparency = orig end
+        end
+        playerState.invisible.originals = {}
+        showToast("◈  Invisible OFF")
+    end
+end)
+
+create("TextLabel", {
+    Size = UDim2.new(1, 0, 0, 34), BackgroundTransparency = 1,
+    Text = "⚠ Invisible & iPad View affect only your local client, not other players or the server.",
+    Font = FONT.Regular, TextSize = 9, TextColor3 = THEME.TX_SUBTLE,
+    TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Center,
+    LayoutOrder = nextOrder(), ZIndex = 4,
+}, playerPage)
+
+-- ── Respawn handler: re-apply active features ──
+localPlayer.CharacterAdded:Connect(function(char)
+    task.wait(0.2)
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    local root = char:FindFirstChild("HumanoidRootPart")
+    -- Speed
+    if playerState.speed.applied and hum then
+        hum.WalkSpeed = playerState.speed.value
+    end
+    -- Jump
+    if playerState.jump.applied and hum then
+        hum.UseJumpPower = true
+        hum.JumpPower = playerState.jump.value
+    end
+    -- Flight
+    if playerState.flight.active and root then
+        if playerState.flight.bodyVel then pcall(function() playerState.flight.bodyVel:Destroy() end) end
+        local bv = Instance.new("BodyVelocity")
+        bv.Name = "LYNEX_Flight"
+        bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+        bv.Velocity = Vector3.zero
+        bv.Parent = root
+        playerState.flight.bodyVel = bv
+    end
+    -- Rotation
+    if playerState.rotation.active and root then
+        if playerState.rotation.bodyAV then pcall(function() playerState.rotation.bodyAV:Destroy() end) end
+        local av = Instance.new("BodyAngularVelocity")
+        av.Name = "LYNEX_Rotation"
+        av.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+        av.AngularVelocity = Vector3.new(0, playerState.rotation.speed, 0)
+        av.Parent = root
+        playerState.rotation.bodyAV = av
+    end
+    -- Swimming
+    if playerState.swimming.active and root then
+        if playerState.swimming.bodyForce then pcall(function() playerState.swimming.bodyForce:Destroy() end) end
+        local bf = Instance.new("BodyForce")
+        bf.Name = "LYNEX_Swim"
+        bf.Force = Vector3.new(0, root.AssemblyMass * workspace.Gravity, 0)
+        bf.Parent = root
+        playerState.swimming.bodyForce = bf
+    end
+    -- Invisible
+    if playerState.invisible.active then
+        playerState.invisible.originals = {}
+        for _, part in ipairs(char:GetDescendants()) do
+            if part:IsA("BasePart") then
+                playerState.invisible.originals[part] = part.Transparency
+                part.Transparency = 1
+            end
+        end
+    end
+    -- iPad View (camera persists usually, but re-apply anyway)
+    if playerState.ipadView.active then
+        local cam = workspace.CurrentCamera
+        if cam then cam.FieldOfView = 80 end
+    end
+end)
+
+-- ── Cleanup on re-execute ──
+_G.LYNEX_CLEANUP = function()
+    -- Restore gravity
+    if playerState.gravity.applied then
+        pcall(function() workspace.Gravity = playerState.gravity.original end)
+    end
+    -- Stop flight
+    if playerState.flight.conn then pcall(function() playerState.flight.conn:Disconnect() end) end
+    if playerState.flight.bodyVel then pcall(function() playerState.flight.bodyVel:Destroy() end) end
+    -- Stop rotation
+    if playerState.rotation.bodyAV then pcall(function() playerState.rotation.bodyAV:Destroy() end) end
+    -- Stop swimming
+    if playerState.swimming.bodyForce then pcall(function() playerState.swimming.bodyForce:Destroy() end) end
+    -- Stop infinite jump
+    if playerState.infiniteJump.conn then pcall(function() playerState.infiniteJump.conn:Disconnect() end) end
+    -- Restore invisible
+    if playerState.invisible.active then
+        for part, orig in pairs(playerState.invisible.originals) do
+            if part and part.Parent then pcall(function() part.Transparency = orig end) end
+        end
+    end
+    -- Restore FOV
+    if playerState.ipadView.active then
+        local cam = workspace.CurrentCamera
+        if cam then pcall(function() cam.FieldOfView = playerState.ipadView.originalFov or 70 end) end
+    end
+    -- Stop spectate
+    if spectate.active then
+        pcall(function() stopSpectating("silent") end)
+    end
+end
+
+--==================================================================
+-- 17) Floating button
 --==================================================================
 local floatingBtn = create("TextButton", {
-    Name = "FloatingBtn",
-    Size = UDim2.fromOffset(48, 48),
+    Name = "FloatingBtn", Size = UDim2.fromOffset(48, 48),
     Position = UDim2.new(0, 14, 0.5, -24),
-    BackgroundColor3 = THEME.P_MAIN,
-    AutoButtonColor = false,
-    Text = "L",
-    Font = FONT.Logo, TextSize = 20,
-    TextColor3 = THEME.TX_MAIN,
-    TextStrokeColor3 = THEME.P_GLOW,
-    TextStrokeTransparency = 0.5,
-    Visible = false,
-    ZIndex = 50,
+    BackgroundColor3 = THEME.P_MAIN, AutoButtonColor = false,
+    Text = "L", Font = FONT.Logo, TextSize = 20,
+    TextColor3 = THEME.TX_MAIN, TextStrokeColor3 = THEME.P_GLOW,
+    TextStrokeTransparency = 0.5, Visible = false, ZIndex = 50,
 }, screenGui)
 addCorner(24, floatingBtn)
 addStroke(THEME.P_GLOW, 2, 0.2, floatingBtn)
@@ -1956,21 +1831,16 @@ addGradient(floatingBtn, {
     ColorSequenceKeypoint.new(0, THEME.P_MAIN),
     ColorSequenceKeypoint.new(1, THEME.P_BRIGHT),
 }, 45)
-
 floatingBadge = create("Frame", {
-    Name = "SpectateBadge",
-    Size = UDim2.fromOffset(10, 10),
+    Name = "SpectateBadge", Size = UDim2.fromOffset(10, 10),
     Position = UDim2.new(1, -6, 0, -6),
-    BackgroundColor3 = THEME.P_GLOW,
-    BorderSizePixel = 0,
-    Visible = false,
-    ZIndex = 51,
+    BackgroundColor3 = THEME.P_GLOW, BorderSizePixel = 0,
+    Visible = false, ZIndex = 51,
 }, floatingBtn)
-addCorner(5, floatingBadge)
-addStroke(THEME.BG_PANEL, 1.5, 0, floatingBadge)
+addCorner(5, floatingBadge); addStroke(THEME.BG_PANEL, 1.5, 0, floatingBadge)
 
 --==================================================================
--- 18) التلاشي
+-- 18) Fade
 --==================================================================
 local origTransparency = {}
 local function scanTransparency(obj)
@@ -1987,14 +1857,10 @@ local function scanTransparency(obj)
         if obj:IsA("ImageLabel") or obj:IsA("ImageButton") then
             snap.ImageTransparency = obj.ImageTransparency
         end
-        if obj:IsA("TextBox") then
-            snap.TextTransparency = obj.TextTransparency
-        end
+        if obj:IsA("TextBox") then snap.TextTransparency = obj.TextTransparency end
         if next(snap) then origTransparency[obj] = snap end
     end
-    for _, c in ipairs(obj:GetChildren()) do
-        scanTransparency(c)
-    end
+    for _, c in ipairs(obj:GetChildren()) do scanTransparency(c) end
 end
 scanTransparency(root)
 
@@ -2007,13 +1873,9 @@ local function setAllTransparency(value)
 end
 
 local function fadeTo(value, duration, style, direction, onDone)
-    if not settings.animations then
-        duration = 0
-        style = Enum.EasingStyle.Linear
-    end
+    if not settings.animations then duration = 0; style = Enum.EasingStyle.Linear end
     local inf = TweenInfo.new(duration, style, direction)
-    local tweens = {}
-    local remaining = 0
+    local tweens, remaining = {}, 0
     for obj, snap in pairs(origTransparency) do
         if obj and obj.Parent then
             local target = {}
@@ -2024,10 +1886,7 @@ local function fadeTo(value, duration, style, direction, onDone)
             remaining += 1
         end
     end
-    if remaining == 0 then
-        if onDone then onDone() end
-        return
-    end
+    if remaining == 0 then if onDone then onDone() end; return end
     for _, t in ipairs(tweens) do
         t.Completed:Once(function()
             remaining -= 1
@@ -2038,7 +1897,7 @@ local function fadeTo(value, duration, style, direction, onDone)
 end
 
 --==================================================================
--- 19) نبض التوهج
+-- 19) Glow Pulse
 --==================================================================
 task.spawn(function()
     while screenGui and screenGui.Parent do
@@ -2059,33 +1918,27 @@ task.spawn(function()
 end)
 
 --==================================================================
--- 20) Press & Hover (للأزرار العامة فقط — أزرار البطاقات لها معالجها الخاص)
+-- 20) Press & Hover
 --==================================================================
 local function attachPressEffect(btn)
     local baseSize = btn.Size
     local pressing = false
     local function scaleTo(f, dur)
         tween(btn, TweenInfo.new(dur), {
-            Size = UDim2.new(
-                baseSize.X.Scale * f, baseSize.X.Offset * f,
-                baseSize.Y.Scale * f, baseSize.Y.Offset * f
-            )
+            Size = UDim2.new(baseSize.X.Scale * f, baseSize.X.Offset * f,
+                             baseSize.Y.Scale * f, baseSize.Y.Offset * f)
         })
     end
     btn.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1
            or input.UserInputType == Enum.UserInputType.Touch then
-            pressing = true
-            scaleTo(0.94, 0.08)
+            pressing = true; scaleTo(0.94, 0.08)
         end
     end)
     btn.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1
            or input.UserInputType == Enum.UserInputType.Touch then
-            if pressing then
-                pressing = false
-                scaleTo(1, 0.14)
-            end
+            if pressing then pressing = false; scaleTo(1, 0.14) end
         end
     end)
 end
@@ -2093,19 +1946,13 @@ end
 for _, btn in ipairs({ menuBtn, closeBtn, floatingBtn, resetBtn, discordBtn, spectateStopBtn }) do
     attachPressEffect(btn)
 end
-for _, data in pairs(tabButtons) do
-    attachPressEffect(data.btn)
-end
+for _, data in pairs(tabButtons) do attachPressEffect(data.btn) end
 
 if UserInputService.MouseEnabled then
     local function attachHover(btn, hoverColor)
         local baseColor = btn.BackgroundColor3
-        btn.MouseEnter:Connect(function()
-            tween(btn, TweenInfo.new(0.18), { BackgroundColor3 = hoverColor })
-        end)
-        btn.MouseLeave:Connect(function()
-            tween(btn, TweenInfo.new(0.18), { BackgroundColor3 = baseColor })
-        end)
+        btn.MouseEnter:Connect(function() tween(btn, TweenInfo.new(0.18), { BackgroundColor3 = hoverColor }) end)
+        btn.MouseLeave:Connect(function() tween(btn, TweenInfo.new(0.18), { BackgroundColor3 = baseColor }) end)
     end
     attachHover(menuBtn, THEME.BG_CARD_HI)
     attachHover(closeBtn, THEME.DANGER)
@@ -2115,15 +1962,13 @@ if UserInputService.MouseEnabled then
 end
 
 --==================================================================
--- 21) سحب النافذة
+-- 21) Drag
 --==================================================================
 local dragging, dragStart, startPos = false, nil, nil
 header.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1
        or input.UserInputType == Enum.UserInputType.Touch then
-        dragging  = true
-        dragStart = input.Position
-        startPos  = root.Position
+        dragging = true; dragStart = input.Position; startPos = root.Position
         local conn
         conn = input.Changed:Connect(function()
             if input.UserInputState == Enum.UserInputState.End then
@@ -2138,21 +1983,18 @@ UserInputService.InputChanged:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseMovement
        or input.UserInputType == Enum.UserInputType.Touch then
         local delta = input.Position - dragStart
-        root.Position = UDim2.new(
-            startPos.X.Scale, startPos.X.Offset + delta.X,
-            startPos.Y.Scale, startPos.Y.Offset + delta.Y
-        )
+        root.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X,
+                                  startPos.Y.Scale, startPos.Y.Offset + delta.Y)
     end
 end)
 
 --==================================================================
--- 22) فتح/طي القائمة الجانبية
+-- 22) Sidebar
 --==================================================================
 local sidebarOpen = true
-sidebar.Size     = UDim2.new(0, sidebarW, 1, 0)
+sidebar.Size = UDim2.new(0, sidebarW, 1, 0)
 content.Position = UDim2.new(0, sidebarW, 0, 0)
-content.Size     = UDim2.new(1, -sidebarW, 1, 0)
-
+content.Size = UDim2.new(1, -sidebarW, 1, 0)
 local function setSidebar(open)
     if sidebarOpen == open then return end
     sidebarOpen = open
@@ -2160,35 +2002,21 @@ local function setSidebar(open)
     tween(sidebar, EASE.OUT, { Size = UDim2.new(0, targetW, 1, 0) })
     tween(content, EASE.OUT, {
         Position = UDim2.new(0, targetW, 0, 0),
-        Size     = UDim2.new(1, -targetW, 1, 0),
+        Size = UDim2.new(1, -targetW, 1, 0),
     })
 end
-
-menuBtn.MouseButton1Click:Connect(function()
-    setSidebar(not sidebarOpen)
-end)
+menuBtn.MouseButton1Click:Connect(function() setSidebar(not sidebarOpen) end)
 
 --==================================================================
--- 23) نظام التبويبات
+-- 23) Tab System
 --==================================================================
-local pageTweens = {}
-local pageOrigPos = {}
-for id, page in pairs(tabPages) do
-    pageOrigPos[id] = page.Position
-end
+local pageTweens, pageOrigPos = {}, {}
+for id, page in pairs(tabPages) do pageOrigPos[id] = page.Position end
 
 local function animatePageIn(page, id)
-    if pageTweens[id] then
-        pageTweens[id]:Cancel()
-        pageTweens[id] = nil
-    end
-    if page:IsA("ScrollingFrame") then
-        page.CanvasPosition = Vector2.new(0, 0)
-    end
-    if not settings.animations then
-        page.Position = pageOrigPos[id]
-        return
-    end
+    if pageTweens[id] then pageTweens[id]:Cancel(); pageTweens[id] = nil end
+    if page:IsA("ScrollingFrame") then page.CanvasPosition = Vector2.new(0, 0) end
+    if not settings.animations then page.Position = pageOrigPos[id]; return end
     local orig = pageOrigPos[id]
     page.Position = UDim2.new(orig.X.Scale, orig.X.Offset + 16, orig.Y.Scale, orig.Y.Offset)
     pageTweens[id] = TweenService:Create(page, TweenInfo.new(0.28, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
@@ -2207,8 +2035,7 @@ local function animateNewsCards()
             task.delay(i * 0.05, function()
                 if card and card.Parent then
                     tween(card, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-                        Position = orig,
-                        BackgroundTransparency = 0.05,
+                        Position = orig, BackgroundTransparency = 0.05,
                     })
                 end
             end)
@@ -2219,21 +2046,13 @@ end
 local function switchTab(id)
     if currentTab == id then return end
     currentTab = id
-    for tid, page in pairs(tabPages) do
-        page.Visible = (tid == id)
-    end
+    for tid, page in pairs(tabPages) do page.Visible = (tid == id) end
     for tid, data in pairs(tabButtons) do
         local active = (tid == id)
-        tween(data.btn, TweenInfo.new(0.2), {
-            BackgroundColor3 = active and THEME.P_MAIN or THEME.BG_CARD,
-        })
+        tween(data.btn, TweenInfo.new(0.2), { BackgroundColor3 = active and THEME.P_MAIN or THEME.BG_CARD })
         data.indicator.Visible = active
-        tween(data.icon, TweenInfo.new(0.2), {
-            TextColor3 = active and THEME.TX_MAIN or THEME.P_GLOW,
-        })
-        tween(data.label, TweenInfo.new(0.2), {
-            TextColor3 = active and THEME.TX_MAIN or THEME.TX_DIM,
-        })
+        tween(data.icon, TweenInfo.new(0.2), { TextColor3 = active and THEME.TX_MAIN or THEME.P_GLOW })
+        tween(data.label, TweenInfo.new(0.2), { TextColor3 = active and THEME.TX_MAIN or THEME.TX_DIM })
     end
     local page = tabPages[id]
     if page then
@@ -2242,29 +2061,23 @@ local function switchTab(id)
         if id == "players" then renderPlayers(searchBox.Text) end
     end
 end
-
 for id, data in pairs(tabButtons) do
     data.btn.MouseButton1Click:Connect(function() switchTab(id) end)
 end
 
 --==================================================================
--- 24) الإظهار / الإخفاء (لا يوقف Spectate)
+-- 24) Show/Hide
 --==================================================================
 local function hideWindow()
-    windowHidden = true
-    removeBlur()
-
+    windowHidden = true; removeBlur()
     if spectateIndicator.Visible then
         tween(spectateIndicator, TweenInfo.new(0.2), { BackgroundTransparency = 1 })
         tween(spectateIndicatorLabel, TweenInfo.new(0.2), { TextTransparency = 1 })
         tween(spectateStopBtn, TweenInfo.new(0.2), { BackgroundTransparency = 1 })
         task.delay(0.22, function()
-            if windowHidden then
-                spectateIndicator.Visible = false
-            end
+            if windowHidden then spectateIndicator.Visible = false end
         end)
     end
-
     tween(outerGlow, TweenInfo.new(0.25), { BackgroundTransparency = 1 })
     mainStroke.Enabled = false
     fadeTo(1, 0.28, Enum.EasingStyle.Quad, Enum.EasingDirection.In, function()
@@ -2287,60 +2100,41 @@ local function showWindow()
             tween(outerGlow, TweenInfo.new(0.3), { BackgroundTransparency = 0.85 })
         end
     end)
-
-    if spectate.active then
-        updateSpectateIndicator()
-    end
+    if spectate.active then updateSpectateIndicator() end
 end
-
 closeBtn.MouseButton1Click:Connect(hideWindow)
 floatingBtn.MouseButton1Click:Connect(showWindow)
 
 --==================================================================
--- 25) تحميل بيانات اللاعب
+-- 25) Profile
 --==================================================================
 local function loadPlayerProfile()
     pcall(function()
-        avatarImg.Image = string.format(
-            "rbxthumb://type=AvatarHeadShot&id=%d&w=150&h=150",
-            localPlayer.UserId
-        )
+        avatarImg.Image = string.format("rbxthumb://type=AvatarHeadShot&id=%d&w=150&h=150", localPlayer.UserId)
     end)
-
-    local displayName = localPlayer.DisplayName
-    local username    = localPlayer.Name
-    local userId      = localPlayer.UserId
+    local displayName, username, userId = localPlayer.DisplayName, localPlayer.Name, localPlayer.UserId
     local okAge, accountAge = pcall(function() return localPlayer.AccountAge end)
-
     displayNameLbl.Text = (displayName ~= "" and displayName) or username
-    usernameLbl.Text    = "@" .. username
-    uidLbl.Text         = tostring(userId)
-
+    usernameLbl.Text = "@" .. username
+    uidLbl.Text = tostring(userId)
     if okAge and typeof(accountAge) == "number" then
         ageLbl.Text = tostring(accountAge) .. " days"
     else
         ageLbl.Text = "N/A"
     end
 end
-
 loadPlayerProfile()
 
 --==================================================================
--- 26) الإعدادات
+-- 26) Settings functions
 --==================================================================
 function applyWindowTransparency(pct)
     settings.transparency = math.clamp(pct, 0, 90)
     local t = settings.transparency / 100
-
     local function setTransp(obj, val)
-        if origTransparency[obj] then
-            origTransparency[obj].BackgroundTransparency = val
-        end
-        if not windowHidden then
-            obj.BackgroundTransparency = val
-        end
+        if origTransparency[obj] then origTransparency[obj].BackgroundTransparency = val end
+        if not windowHidden then obj.BackgroundTransparency = val end
     end
-
     setTransp(main, t)
     setTransp(header, math.min(1, t + 0.02))
     setTransp(sidebar, math.min(1, t + 0.10))
@@ -2357,22 +2151,14 @@ function applyGlowState()
 end
 
 resetBtn.MouseButton1Click:Connect(function()
-    settings.animations   = true
-    settings.transparency = 15
-    settings.glow         = true
-
-    animRow.setOn(true)
-    glowRow.setOn(true)
-    transRow.setValue(15)
-
-    applyWindowTransparency(15)
-    applyGlowState()
-
+    settings.animations = true; settings.transparency = 15; settings.glow = true
+    animRow.setOn(true); glowRow.setOn(true); transRow.setValue(15)
+    applyWindowTransparency(15); applyGlowState()
     showToast("↻  Settings restored")
 end)
 
 --==================================================================
--- 27) تغيّر حجم الشاشة
+-- 27) Viewport
 --==================================================================
 local function onViewportChange()
     local w, h = computeWindowSize()
@@ -2388,18 +2174,16 @@ local function onViewportChange()
         root.Position = UDim2.fromOffset(posX, posY)
     end
 end
-
 local function bindCamera(cam)
     if cam then cam:GetPropertyChangedSignal("ViewportSize"):Connect(onViewportChange) end
 end
 bindCamera(workspace.CurrentCamera)
 workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
-    bindCamera(workspace.CurrentCamera)
-    onViewportChange()
+    bindCamera(workspace.CurrentCamera); onViewportChange()
 end)
 
 --==================================================================
--- 28) تشغيل تلقائي + Blur + أنيميشن الدخول
+-- 28) Startup
 --==================================================================
 switchTab("home")
 applyBlur()
@@ -2408,23 +2192,18 @@ do
     setAllTransparency(1)
     mainStroke.Transparency = 1
     outerGlow.BackgroundTransparency = 1
-
     local origPos = root.Position
     root.Position = UDim2.new(origPos.X.Scale, origPos.X.Offset, origPos.Y.Scale, origPos.Y.Offset + 16)
-
     task.wait(0.05)
-
     TweenService:Create(root, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
         Position = origPos,
     }):Play()
-
     fadeTo("orig", 0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out, function()
         mainStroke.Transparency = 0.15
     end)
-
     if settings.animations then
         TweenService:Create(outerGlow, TweenInfo.new(0.5), { BackgroundTransparency = 0.85 }):Play()
     end
 end
 
-print("[LYNEX HUB v2.7] ✦ Ready — Spectate + Teleport + Players tab")
+print("[LYNEX HUB v2.8] ✦ Ready — Player tab added")
