@@ -1,8 +1,8 @@
 --!nonstrict
 --==================================================================
---  ✦ LYNEX HUB v2.8 ✦
---  Home • Players • Player • News • Settings
---  + Spectate + Teleport + Movement/Physics/Visuals
+--  ✦ LYNEX HUB v2.9 ✦
+--  Home • Players • Player • Auto Fish • News • Settings
+--  + Server Info (replaces Developer Info)
 --==================================================================
 
 local Players          = game:GetService("Players")
@@ -10,19 +10,20 @@ local UserInputService = game:GetService("UserInputService")
 local TweenService     = game:GetService("TweenService")
 local Lighting         = game:GetService("Lighting")
 local RunService       = game:GetService("RunService")
+local MarketplaceService = game:GetService("MarketplaceService")
 
 local localPlayer = Players.LocalPlayer
 local playerGui   = localPlayer:WaitForChild("PlayerGui")
 
 --==================================================================
--- 0) الحالة
+-- 0) State
 --==================================================================
 local settings = { animations = true, transparency = 15, glow = true }
 local windowHidden = false
 local screenGui, blurObj
 
 --==================================================================
--- 1) الجذر
+-- 1) Root resolver
 --==================================================================
 local function resolveGuiParent()
     if typeof(gethui) == "function" then
@@ -35,7 +36,7 @@ local function resolveGuiParent()
 end
 
 --==================================================================
--- 2) الثيم
+-- 2) Theme
 --==================================================================
 local THEME = {
     BG_PANEL = Color3.fromRGB(16,10,28), BG_HEADER = Color3.fromRGB(22,14,38),
@@ -47,6 +48,7 @@ local THEME = {
     TX_SUBTLE = Color3.fromRGB(120,110,150),
     BORDER = Color3.fromRGB(70,44,120), BORDER_HI = Color3.fromRGB(130,84,220),
     DANGER = Color3.fromRGB(200,60,110), DANGER_HI = Color3.fromRGB(240,90,150),
+    OK = Color3.fromRGB(120,220,140),
 }
 
 local function pickFont(name, fallback)
@@ -181,10 +183,9 @@ local function removeBlur()
 end
 
 --==================================================================
--- 4) تنظيف
+-- 4) Cleanup
 --==================================================================
 if _G.LYNEX_CLEANUP then pcall(_G.LYNEX_CLEANUP) end
-
 local guiParent = resolveGuiParent()
 for _, p in ipairs({ guiParent, playerGui }) do
     if p then
@@ -198,7 +199,7 @@ do
 end
 
 --==================================================================
--- 5) قياسات
+-- 5) Viewport
 --==================================================================
 local function getViewport()
     local cam = workspace.CurrentCamera
@@ -222,9 +223,7 @@ screenGui = create("ScreenGui", {
     Name = "LYNEX_HUB", ResetOnSpawn = false, IgnoreGuiInset = true,
     ZIndexBehavior = Enum.ZIndexBehavior.Sibling, DisplayOrder = 999,
 }, guiParent)
-if screenGui.Destroying then
-    screenGui.Destroying:Connect(removeBlur)
-end
+if screenGui.Destroying then screenGui.Destroying:Connect(removeBlur) end
 
 local winW, winH = computeWindowSize()
 local root = create("Frame", {
@@ -337,14 +336,15 @@ local pagesContainer = create("Frame", {
 }, content)
 
 --==================================================================
--- 10) Tabs  ◀️ إضافة Player
+-- 10) Tabs  ◀️ + Auto Fish
 --==================================================================
 local TABS = {
-    { id = "home",     name = "Home",     icon = "⌂" },
-    { id = "players",  name = "Players",  icon = "◉" },
-    { id = "player",   name = "Player",   icon = "●" },
-    { id = "news",     name = "News",     icon = "✉" },
-    { id = "settings", name = "Settings", icon = "⚙" },
+    { id = "home",     name = "Home",      icon = "⌂" },
+    { id = "players",  name = "Players",   icon = "◉" },
+    { id = "player",   name = "Player",    icon = "●" },
+    { id = "autofish", name = "Auto Fish", icon = "≋" },
+    { id = "news",     name = "News",      icon = "✉" },
+    { id = "settings", name = "Settings",  icon = "⚙" },
 }
 
 local tabButtons, tabPages, currentTab = {}, {}, nil
@@ -433,6 +433,7 @@ create("TextLabel", {
     TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 5,
 }, hero)
 
+-- ── Profile (unchanged) ──
 local profileCard = create("Frame", {
     Name = "ProfileCard", Size = UDim2.new(1, 0, 0, 90),
     BackgroundColor3 = THEME.BG_CARD, BackgroundTransparency = 0.05,
@@ -446,7 +447,6 @@ local avatarFrame = create("Frame", {
     ClipsDescendants = true, ZIndex = 5,
 }, profileCard)
 addCorner(33, avatarFrame); addStroke(THEME.P_BRIGHT, 2, 0.15, avatarFrame)
-
 local avatarImg = create("ImageLabel", {
     Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Image = "",
     ScaleType = Enum.ScaleType.Crop, ZIndex = 6,
@@ -459,7 +459,6 @@ local displayNameLbl = create("TextLabel", {
     TextColor3 = THEME.TX_MAIN, TextXAlignment = Enum.TextXAlignment.Left,
     TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 5,
 }, profileCard)
-
 local usernameLbl = create("TextLabel", {
     Size = UDim2.new(1, -infoX - 8, 0, 14), Position = UDim2.new(0, infoX, 0, 30),
     BackgroundTransparency = 1, Text = "@loading", Font = FONT.Regular, TextSize = 11,
@@ -488,86 +487,37 @@ end
 local uidLbl = smallInfo(infoX, 95, "#", "—")
 local ageLbl = smallInfo(infoX + 100, 95, "◷", "—")
 
-local devCard = create("Frame", {
-    Name = "DevCard", Size = UDim2.new(1, 0, 0, 100),
+-- ── Server Information  ◀️ replaces Developer Info ──
+local SERVER_ROWS = {
+    { key = "players",  icon = "◉", label = "Players"   },
+    { key = "gameName", icon = "✦", label = "Game Name" },
+    { key = "mapName",  icon = "▣", label = "Map Name"  },
+    { key = "serverId", icon = "◆", label = "Server ID" },
+    { key = "placeId",  icon = "◈", label = "Place ID"  },
+}
+
+local serverCardHeight = 34 + (#SERVER_ROWS * 22) + 10
+local serverCard = create("Frame", {
+    Name = "ServerCard", Size = UDim2.new(1, 0, 0, serverCardHeight),
     BackgroundColor3 = THEME.BG_CARD, BackgroundTransparency = 0.05,
     BorderSizePixel = 0, LayoutOrder = 3, ZIndex = 4,
 }, homePage)
-addCorner(12, devCard); addStroke(THEME.BORDER, 1, 0.15, devCard)
+addCorner(12, serverCard); addStroke(THEME.BORDER, 1, 0.15, serverCard)
+
 create("TextLabel", {
     Size = UDim2.new(1, -20, 0, 22), Position = UDim2.new(0, 12, 0, 8),
-    BackgroundTransparency = 1, Text = "✦  DEVELOPER INFO",
+    BackgroundTransparency = 1, Text = "✦  SERVER INFORMATION",
     Font = FONT.Bold, TextSize = 12, TextColor3 = THEME.P_GLOW,
     TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 5,
-}, devCard)
+}, serverCard)
 
-local function makeCopyRow(parent, order, iconText, prefix, valueText, copyPayload, copyLabel)
-    local row = create("TextButton", {
-        Size = UDim2.new(1, -20, 0, 28), Position = UDim2.new(0, 10, 0, 34 + order * 30),
-        BackgroundColor3 = THEME.BG_CARD_HI, BackgroundTransparency = 0.7,
-        AutoButtonColor = false, Text = "", ZIndex = 5,
-    }, parent)
-    addCorner(6, row); addStroke(THEME.BORDER, 1, 0.4, row)
-    create("TextLabel", {
-        Size = UDim2.fromOffset(20, 28), Position = UDim2.new(0, 4, 0, 0),
-        BackgroundTransparency = 1, Text = iconText, Font = FONT.Bold, TextSize = 12,
-        TextColor3 = THEME.P_GLOW, ZIndex = 6,
-    }, row)
-    create("TextLabel", {
-        Size = UDim2.new(0, 66, 1, 0), Position = UDim2.new(0, 26, 0, 0),
-        BackgroundTransparency = 1, Text = prefix, Font = FONT.Medium, TextSize = 10,
-        TextColor3 = THEME.TX_SUBTLE, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 6,
-    }, row)
-    create("TextLabel", {
-        Size = UDim2.new(1, -112, 1, 0), Position = UDim2.new(0, 96, 0, 0),
-        BackgroundTransparency = 1, Text = valueText, Font = FONT.Bold, TextSize = 11,
-        TextColor3 = THEME.TX_MAIN, TextXAlignment = Enum.TextXAlignment.Right,
-        TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 6,
-    }, row)
-    create("TextLabel", {
-        Size = UDim2.fromOffset(16, 28), Position = UDim2.new(1, -20, 0, 0),
-        BackgroundTransparency = 1, Text = "⧉", Font = FONT.Bold, TextSize = 11,
-        TextColor3 = THEME.P_GLOW, TextTransparency = 0.3, ZIndex = 6,
-    }, row)
-    row.MouseButton1Click:Connect(function() copyText(copyPayload, copyLabel) end)
-    row.MouseEnter:Connect(function() tween(row, TweenInfo.new(0.15), { BackgroundTransparency = 0.3 }) end)
-    row.MouseLeave:Connect(function() tween(row, TweenInfo.new(0.15), { BackgroundTransparency = 0.7 }) end)
-end
-makeCopyRow(devCard, 0, "◆", "Roblox", "hamza000599", "hamza000599", "Roblox username copied")
-makeCopyRow(devCard, 1, "◈", "Discord", "hamza.abc0", "hamza.abc0", "Discord username copied")
+local serverInfoLabels = {}
 
-local SCRIPT_INFO = {
-    { icon = "✦", label = "Script Name", value = "LYNEX HUB" },
-    { icon = "◆", label = "Version", value = "V2.8.0" },
-    { icon = "◉", label = "Developer", value = "hamza000599" },
-    { icon = "◈", label = "Language", value = "Luau" },
-    { icon = "▣", label = "Platform", value = "Roblox" },
-    { icon = "▤", label = "Executor", value = "Delta" },
-    { icon = "◐", label = "UI Theme", value = "Purple" },
-    { icon = "▬", label = "Device Support", value = "Mobile" },
-    { icon = "●", label = "Status", value = "Active" },
-    { icon = "◷", label = "Last Update", value = "—" },
-}
-
-local scriptCardHeight = 34 + (#SCRIPT_INFO * 22) + 10
-local scriptCard = create("Frame", {
-    Name = "ScriptCard", Size = UDim2.new(1, 0, 0, scriptCardHeight),
-    BackgroundColor3 = THEME.BG_CARD, BackgroundTransparency = 0.05,
-    BorderSizePixel = 0, LayoutOrder = 4, ZIndex = 4,
-}, homePage)
-addCorner(12, scriptCard); addStroke(THEME.BORDER, 1, 0.15, scriptCard)
-create("TextLabel", {
-    Size = UDim2.new(1, -20, 0, 22), Position = UDim2.new(0, 12, 0, 8),
-    BackgroundTransparency = 1, Text = "✦  SCRIPT INFORMATION",
-    Font = FONT.Bold, TextSize = 12, TextColor3 = THEME.P_GLOW,
-    TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 5,
-}, scriptCard)
-
-local function makeInfoRow(parent, order, iconText, labelText, valueText)
+local function makeServerInfoRow(order, iconText, labelText)
     local row = create("Frame", {
         Size = UDim2.new(1, -20, 0, 20), Position = UDim2.new(0, 10, 0, 34 + order * 22),
         BackgroundTransparency = 1, ZIndex = 5,
-    }, parent)
+    }, serverCard)
     create("TextLabel", {
         Size = UDim2.fromOffset(14, 20), BackgroundTransparency = 1, Text = iconText,
         Font = FONT.Bold, TextSize = 10, TextColor3 = THEME.P_GLOW, ZIndex = 6,
@@ -577,22 +527,85 @@ local function makeInfoRow(parent, order, iconText, labelText, valueText)
         BackgroundTransparency = 1, Text = labelText, Font = FONT.Medium, TextSize = 10,
         TextColor3 = THEME.TX_SUBTLE, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 6,
     }, row)
-    create("TextLabel", {
+    local valueLbl = create("TextLabel", {
         Size = UDim2.new(1, -128, 1, 0), Position = UDim2.new(0, 123, 0, 0),
-        BackgroundTransparency = 1, Text = valueText, Font = FONT.Bold, TextSize = 10,
+        BackgroundTransparency = 1, Text = "—", Font = FONT.Bold, TextSize = 10,
         TextColor3 = THEME.TX_MAIN, TextXAlignment = Enum.TextXAlignment.Right,
         TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 6,
     }, row)
-end
-for i, info in ipairs(SCRIPT_INFO) do
-    makeInfoRow(scriptCard, i - 1, info.icon, info.label, info.value)
+    return valueLbl
 end
 
+for i, info in ipairs(SERVER_ROWS) do
+    serverInfoLabels[info.key] = makeServerInfoRow(i - 1, info.icon, info.label)
+end
+
+-- Cache for Map Name (GetProductInfo is HTTP — call once)
+local cachedMapName = nil
+local function resolveMapName()
+    if cachedMapName then return cachedMapName end
+    local name = nil
+    -- Try GetProductInfo (HTTP — may be blocked)
+    pcall(function()
+        local info = MarketplaceService:GetProductInfo(game.PlaceId)
+        if info and info.Name and info.Name ~= "" then
+            name = info.Name
+        end
+    end)
+    -- Fallback to game.Name
+    if not name or name == "" then
+        name = (game.Name and game.Name ~= "") and game.Name or nil
+    end
+    cachedMapName = name
+    return name
+end
+
+local function updateServerInfo()
+    -- Players (dynamic)
+    if serverInfoLabels.players then
+        local cur = #Players:GetPlayers()
+        local max = Players.MaxPlayers
+        serverInfoLabels.players.Text = cur .. " / " .. max
+    end
+
+    -- Game Name
+    if serverInfoLabels.gameName then
+        serverInfoLabels.gameName.Text = (game.Name and game.Name ~= "")
+            and game.Name or "N/A"
+    end
+
+    -- Map Name
+    if serverInfoLabels.mapName then
+        local mapName = resolveMapName()
+        serverInfoLabels.mapName.Text = mapName or "N/A"
+    end
+
+    -- Server ID (JobId — empty in Studio)
+    if serverInfoLabels.serverId then
+        local ok, jobId = pcall(function() return game.JobId end)
+        if ok and jobId and jobId ~= "" then
+            serverInfoLabels.serverId.Text = jobId
+        else
+            serverInfoLabels.serverId.Text = "N/A"
+        end
+    end
+
+    -- Place ID
+    if serverInfoLabels.placeId then
+        serverInfoLabels.placeId.Text = tostring(game.PlaceId)
+    end
+end
+
+updateServerInfo()
+Players.PlayerAdded:Connect(updateServerInfo)
+Players.PlayerRemoving:Connect(updateServerInfo)
+
+-- ── Discord Button (unchanged) ──
 local DISCORD_URL = "https://discord.gg/xzNRnKyVd"
 local discordBtn = create("TextButton", {
     Name = "DiscordBtn", Size = UDim2.new(1, 0, 0, 52),
     BackgroundColor3 = THEME.P_MAIN, AutoButtonColor = false, Text = "",
-    LayoutOrder = 5, ZIndex = 4,
+    LayoutOrder = 4, ZIndex = 4,
 }, homePage)
 addCorner(12, discordBtn)
 local discordStroke = addStroke(THEME.P_GLOW, 2, 0.35, discordBtn)
@@ -652,7 +665,6 @@ local function getHumanoid(player)
     if not char then return nil end
     return char:FindFirstChildOfClass("Humanoid")
 end
-
 local function displayNameOf(player)
     if not player then return "?" end
     local d = player.DisplayName
@@ -788,7 +800,6 @@ Players.PlayerRemoving:Connect(function(p)
         stopSpectating("Target left — camera restored")
     end
 end)
-
 localPlayer.CharacterAdded:Connect(function()
     if spectate.active and spectate.target then
         task.wait(0.15)
@@ -796,7 +807,6 @@ localPlayer.CharacterAdded:Connect(function()
         bindCameraToTarget()
     end
 end)
-
 spectateStopBtn.MouseButton1Click:Connect(function() stopSpectating() end)
 if UserInputService.MouseEnabled then
     spectateStopBtn.MouseEnter:Connect(function()
@@ -810,11 +820,10 @@ if UserInputService.MouseEnabled then
 end
 
 --==================================================================
--- 13.6) Teleport System
+-- 13.6) Teleport
 --==================================================================
 local TELEPORT_COOLDOWN = 1.0
 local lastTeleportTime = 0
-
 local function teleportToPlayer(targetPlayer, button)
     if not targetPlayer or not targetPlayer.Parent then
         showToast("➤  Player unavailable"); return
@@ -1094,6 +1103,7 @@ local NEWS_DATA = {
     { title = "Persistent Spectate Fix", body = "Spectate now persists after hiding the UI, supports all players, and handles respawns and disconnects reliably.", date = "2025-02-15" },
     { title = "Teleport Button", body = "New Teleport button next to Spectate lets you travel to any player — compliant with in-game movement rules.", date = "2025-02-22" },
     { title = "Player Tab", body = "New Player tab with Movement, Special Movement and Visuals — speed, jump, flight, gravity, rotation, infinite jump, swimming, iPad view, invisible.", date = "2025-03-01" },
+    { title = "Server Info + Auto Fish", body = "Home now shows live Server Information. New Auto Fish tab loads the fishing script on demand.", date = "2025-03-08" },
 }
 local newsCards = {}
 for i, item in ipairs(NEWS_DATA) do
@@ -1129,7 +1139,7 @@ for i, item in ipairs(NEWS_DATA) do
 end
 
 --==================================================================
--- 16) Settings (helpers included)
+-- 16) Settings helpers
 --==================================================================
 local settingsPage = createPage("settings")
 local settingsScroll = create("ScrollingFrame", {
@@ -1275,7 +1285,7 @@ local resetBtn = create("TextButton", {
 addCorner(10, resetBtn); addStroke(THEME.DANGER, 1.2, 0.15, resetBtn)
 
 --==================================================================
--- 16.5) Player Page  ◀️ جديد
+-- 16.5) Player Page
 --==================================================================
 local playerPage = createPage("player", true)
 create("UIListLayout", { Padding = UDim.new(0, 10), SortOrder = Enum.SortOrder.LayoutOrder }, playerPage)
@@ -1283,7 +1293,6 @@ create("UIPadding", {
     PaddingTop = UDim.new(0, 2), PaddingBottom = UDim.new(0, 10), PaddingRight = UDim.new(0, 6),
 }, playerPage)
 
--- ── Player State ──
 local playerState = {
     speed = { applied = false, value = 16, original = 16 },
     jump = { applied = false, value = 50, original = 50 },
@@ -1296,7 +1305,6 @@ local playerState = {
     invisible = { active = false, originals = {} },
 }
 
--- ── Helper: Range Slider (custom min/max) ──
 local function createRangeSlider(parent, order, labelText, minV, maxV, initialValue, onChange)
     local row = create("Frame", {
         Size = UDim2.new(1, 0, 0, 62), BackgroundColor3 = THEME.BG_CARD,
@@ -1331,8 +1339,7 @@ local function createRangeSlider(parent, order, labelText, minV, maxV, initialVa
     }, bar)
     addCorner(4, fill)
     local knob = create("Frame", {
-        Size = UDim2.fromOffset(18, 18),
-        Position = UDim2.new(initialRel, -9, 0.5, -9),
+        Size = UDim2.fromOffset(18, 18), Position = UDim2.new(initialRel, -9, 0.5, -9),
         BackgroundColor3 = THEME.TX_MAIN, BorderSizePixel = 0, ZIndex = 7,
     }, bar)
     addCorner(9, knob); addStroke(THEME.P_GLOW, 1.5, 0, knob)
@@ -1351,8 +1358,7 @@ local function createRangeSlider(parent, order, labelText, minV, maxV, initialVa
     local function fromInput(input)
         local pos, size = bar.AbsolutePosition, bar.AbsoluteSize
         if size.X <= 0 then return end
-        local rel = math.clamp((input.Position.X - pos.X) / size.X, 0, 1)
-        apply(minV + rel * (maxV - minV), true)
+        apply(minV + math.clamp((input.Position.X - pos.X) / size.X, 0, 1) * (maxV - minV), true)
     end
     hitbox.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1
@@ -1371,7 +1377,6 @@ local function createRangeSlider(parent, order, labelText, minV, maxV, initialVa
     return { setValue = function(v) apply(v, false) end, get = function() return current end }
 end
 
--- ── Helper: Toggle Button (larger, card form) ──
 local function createPlayerToggle(parent, order, titleText, subtitleText, initial, onChange)
     local card = create("Frame", {
         Size = UDim2.new(1, 0, 0, 58), BackgroundColor3 = THEME.BG_CARD,
@@ -1417,7 +1422,6 @@ local function createPlayerToggle(parent, order, titleText, subtitleText, initia
     return { setOn = function(v) setOn(v, false) end, get = function() return isOn end }
 end
 
--- ── Helper: small action buttons row ──
 local function createActionButtons(parent, order, applyLabel, applyColor, onApply, onReset)
     local row = create("Frame", {
         Size = UDim2.new(1, 0, 0, 32), BackgroundTransparency = 1,
@@ -1426,7 +1430,8 @@ local function createActionButtons(parent, order, applyLabel, applyColor, onAppl
     local applyBtn = create("TextButton", {
         Size = UDim2.new(0.5, -4, 1, 0), Position = UDim2.new(0, 0, 0, 0),
         BackgroundColor3 = applyColor, AutoButtonColor = false,
-        Text = applyLabel, Font = FONT.Bold, TextSize = 11, TextColor3 = THEME.TX_MAIN, ZIndex = 5,
+        Text = applyLabel, Font = FONT.Bold, TextSize = 11,
+        TextColor3 = THEME.TX_MAIN, ZIndex = 5,
     }, row)
     addCorner(8, applyBtn)
     local applyStroke = addStroke(THEME.P_GLOW, 1, 0.3, applyBtn)
@@ -1444,27 +1449,20 @@ local function createActionButtons(parent, order, applyLabel, applyColor, onAppl
     resetB.MouseButton1Click:Connect(onReset)
 end
 
--- ── Helper: section header ──
 local function addSectionHeader(text, order)
-    local lbl = create("TextLabel", {
+    return create("TextLabel", {
         Size = UDim2.new(1, 0, 0, 22), BackgroundTransparency = 1,
         Text = "✦  " .. text, Font = FONT.Bold, TextSize = 12,
         TextColor3 = THEME.P_GLOW, TextXAlignment = Enum.TextXAlignment.Left,
         LayoutOrder = order, ZIndex = 5,
     }, playerPage)
-    return lbl
 end
 
--- ── UI Order counter ──
 local uiOrder = 0
 local function nextOrder() uiOrder += 1; return uiOrder end
 
--- ═══════════════════════════════════════════════════════
--- MOVEMENT SECTION
--- ═══════════════════════════════════════════════════════
 addSectionHeader("MOVEMENT", nextOrder())
 
--- Speed Slider
 local speedSlider = createRangeSlider(playerPage, nextOrder(), "◉ Speed", 16, 500, playerState.speed.value, function(v)
     playerState.speed.value = v
     if playerState.speed.applied then
@@ -1478,9 +1476,7 @@ createActionButtons(playerPage, nextOrder(), "Apply  ✓", THEME.P_MAIN, functio
         hum.WalkSpeed = playerState.speed.value
         playerState.speed.applied = true
         showToast("◉  Speed applied: " .. playerState.speed.value)
-    else
-        showToast("◉  Character not ready")
-    end
+    else showToast("◉  Character not ready") end
 end, function()
     playerState.speed.value = playerState.speed.original
     speedSlider.setValue(playerState.speed.original)
@@ -1490,15 +1486,11 @@ end, function()
     showToast("↻  Speed reset")
 end)
 
--- Jump Slider
 local jumpSlider = createRangeSlider(playerPage, nextOrder(), "◈ Jump Power", 50, 500, playerState.jump.value, function(v)
     playerState.jump.value = v
     if playerState.jump.applied then
         local hum = getHumanoid(localPlayer)
-        if hum then
-            hum.UseJumpPower = true
-            hum.JumpPower = v
-        end
+        if hum then hum.UseJumpPower = true; hum.JumpPower = v end
     end
 end)
 createActionButtons(playerPage, nextOrder(), "Apply  ✓", THEME.P_MAIN, function()
@@ -1508,22 +1500,16 @@ createActionButtons(playerPage, nextOrder(), "Apply  ✓", THEME.P_MAIN, functio
         hum.JumpPower = playerState.jump.value
         playerState.jump.applied = true
         showToast("◈  Jump applied: " .. playerState.jump.value)
-    else
-        showToast("◈  Character not ready")
-    end
+    else showToast("◈  Character not ready") end
 end, function()
     playerState.jump.value = playerState.jump.original
     jumpSlider.setValue(playerState.jump.original)
     local hum = getHumanoid(localPlayer)
-    if hum then
-        hum.UseJumpPower = true
-        hum.JumpPower = playerState.jump.original
-    end
+    if hum then hum.UseJumpPower = true; hum.JumpPower = playerState.jump.original end
     playerState.jump.applied = false
     showToast("↻  Jump reset")
 end)
 
--- Flight Card
 local flightToggle = createPlayerToggle(playerPage, nextOrder(), "◈ Flight", "Hover & fly toward camera look", false, function(v)
     playerState.flight.active = v
     if v then
@@ -1531,9 +1517,7 @@ local flightToggle = createPlayerToggle(playerPage, nextOrder(), "◈ Flight", "
         if not char then showToast("◈  Character not ready"); return end
         local root = char:FindFirstChild("HumanoidRootPart")
         if not root then return end
-        if playerState.flight.bodyVel then
-            pcall(function() playerState.flight.bodyVel:Destroy() end)
-        end
+        if playerState.flight.bodyVel then pcall(function() playerState.flight.bodyVel:Destroy() end) end
         local bv = Instance.new("BodyVelocity")
         bv.Name = "LYNEX_Flight"
         bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
@@ -1546,38 +1530,26 @@ local flightToggle = createPlayerToggle(playerPage, nextOrder(), "◈ Flight", "
             local h = c and c:FindFirstChildOfClass("Humanoid")
             local r = c and c:FindFirstChild("HumanoidRootPart")
             if not (h and r and bv.Parent) then return end
-            local md = h.MoveDirection
-            if md.Magnitude > 0.01 then
+            if h.MoveDirection.Magnitude > 0.01 then
                 local cam = workspace.CurrentCamera
-                if cam then
-                    local look = cam.CFrame.LookVector
-                    bv.Velocity = look * playerState.flight.speed
-                end
+                if cam then bv.Velocity = cam.CFrame.LookVector * playerState.flight.speed end
             else
                 bv.Velocity = Vector3.zero
             end
         end)
         showToast("◈  Flight ON — move joystick to fly")
     else
-        if playerState.flight.conn then
-            pcall(function() playerState.flight.conn:Disconnect() end)
-            playerState.flight.conn = nil
-        end
-        if playerState.flight.bodyVel then
-            pcall(function() playerState.flight.bodyVel:Destroy() end)
-            playerState.flight.bodyVel = nil
-        end
+        if playerState.flight.conn then pcall(function() playerState.flight.conn:Disconnect() end); playerState.flight.conn = nil end
+        if playerState.flight.bodyVel then pcall(function() playerState.flight.bodyVel:Destroy() end); playerState.flight.bodyVel = nil end
         showToast("◈  Flight OFF")
     end
 end)
-local flightSpeedSlider = createRangeSlider(playerPage, nextOrder(), "↝ Flight Speed", 10, 300, playerState.flight.speed, function(v)
+createRangeSlider(playerPage, nextOrder(), "↝ Flight Speed", 10, 300, playerState.flight.speed, function(v)
     playerState.flight.speed = v
 end)
 
--- Gravity Slider
 local gravitySlider = createRangeSlider(playerPage, nextOrder(), "◉ Gravity", 0, 196, math.floor(playerState.gravity.original), function(v)
-    playerState.gravity.value = v
-    playerState.gravity.applied = true
+    playerState.gravity.value = v; playerState.gravity.applied = true
     workspace.Gravity = v
 end)
 createActionButtons(playerPage, nextOrder(), "Apply  ✓", THEME.P_MAIN, function()
@@ -1592,15 +1564,11 @@ end, function()
     showToast("↻  Gravity reset")
 end)
 
--- Rotation Card
 local rotationToggle = createPlayerToggle(playerPage, nextOrder(), "◈ Rotation", "Spin your character in place", false, function(v)
     playerState.rotation.active = v
-    local char = localPlayer.Character
-    if playerState.rotation.bodyAV then
-        pcall(function() playerState.rotation.bodyAV:Destroy() end)
-        playerState.rotation.bodyAV = nil
-    end
+    if playerState.rotation.bodyAV then pcall(function() playerState.rotation.bodyAV:Destroy() end); playerState.rotation.bodyAV = nil end
     if v then
+        local char = localPlayer.Character
         if not char then showToast("◈  Character not ready"); return end
         local root = char:FindFirstChild("HumanoidRootPart")
         if not root then return end
@@ -1611,52 +1579,36 @@ local rotationToggle = createPlayerToggle(playerPage, nextOrder(), "◈ Rotation
         av.Parent = root
         playerState.rotation.bodyAV = av
         showToast("◈  Rotation ON")
-    else
-        showToast("◈  Rotation OFF")
-    end
+    else showToast("◈  Rotation OFF") end
 end)
-local rotationSpeedSlider = createRangeSlider(playerPage, nextOrder(), "↻ Rotation Speed", 1, 50, playerState.rotation.speed, function(v)
+createRangeSlider(playerPage, nextOrder(), "↻ Rotation Speed", 1, 50, playerState.rotation.speed, function(v)
     playerState.rotation.speed = v
     if playerState.rotation.bodyAV and playerState.rotation.bodyAV.Parent then
         playerState.rotation.bodyAV.AngularVelocity = Vector3.new(0, v, 0)
     end
 end)
 
--- ═══════════════════════════════════════════════════════
--- SPECIAL MOVEMENT SECTION
--- ═══════════════════════════════════════════════════════
 addSectionHeader("SPECIAL MOVEMENT", nextOrder())
 
-local infiniteJumpToggle = createPlayerToggle(playerPage, nextOrder(), "◈ Infinite Jump", "Jump repeatedly while holding space", false, function(v)
+createPlayerToggle(playerPage, nextOrder(), "◈ Infinite Jump", "Jump repeatedly while holding space", false, function(v)
     playerState.infiniteJump.active = v
     if v then
-        if playerState.infiniteJump.conn then
-            pcall(function() playerState.infiniteJump.conn:Disconnect() end)
-            playerState.infiniteJump.conn = nil
-        end
+        if playerState.infiniteJump.conn then pcall(function() playerState.infiniteJump.conn:Disconnect() end) end
         playerState.infiniteJump.conn = UserInputService.JumpRequest:Connect(function()
             if not playerState.infiniteJump.active then return end
             local hum = getHumanoid(localPlayer)
-            if hum and hum.Health > 0 then
-                hum:ChangeState(Enum.HumanoidStateType.Jumping)
-            end
+            if hum and hum.Health > 0 then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
         end)
         showToast("◈  Infinite Jump ON")
     else
-        if playerState.infiniteJump.conn then
-            pcall(function() playerState.infiniteJump.conn:Disconnect() end)
-            playerState.infiniteJump.conn = nil
-        end
+        if playerState.infiniteJump.conn then pcall(function() playerState.infiniteJump.conn:Disconnect() end); playerState.infiniteJump.conn = nil end
         showToast("◈  Infinite Jump OFF")
     end
 end)
 
-local swimmingToggle = createPlayerToggle(playerPage, nextOrder(), "◈ Swimming", "Float in the air (local only)", false, function(v)
+createPlayerToggle(playerPage, nextOrder(), "◈ Swimming", "Float in the air (local only)", false, function(v)
     playerState.swimming.active = v
-    if playerState.swimming.bodyForce then
-        pcall(function() playerState.swimming.bodyForce:Destroy() end)
-        playerState.swimming.bodyForce = nil
-    end
+    if playerState.swimming.bodyForce then pcall(function() playerState.swimming.bodyForce:Destroy() end); playerState.swimming.bodyForce = nil end
     if v then
         local char = localPlayer.Character
         if not char then showToast("◈  Character not ready"); return end
@@ -1668,17 +1620,12 @@ local swimmingToggle = createPlayerToggle(playerPage, nextOrder(), "◈ Swimming
         bf.Parent = root
         playerState.swimming.bodyForce = bf
         showToast("◈  Swimming ON")
-    else
-        showToast("◈  Swimming OFF")
-    end
+    else showToast("◈  Swimming OFF") end
 end)
 
--- ═══════════════════════════════════════════════════════
--- VISUALS SECTION
--- ═══════════════════════════════════════════════════════
 addSectionHeader("VISUALS", nextOrder())
 
-local ipadToggle = createPlayerToggle(playerPage, nextOrder(), "▣ iPad View", "Wider camera FOV (local only)", false, function(v)
+createPlayerToggle(playerPage, nextOrder(), "▣ iPad View", "Wider camera FOV (local only)", false, function(v)
     playerState.ipadView.active = v
     local cam = workspace.CurrentCamera
     if not cam then return end
@@ -1692,7 +1639,7 @@ local ipadToggle = createPlayerToggle(playerPage, nextOrder(), "▣ iPad View", 
     end
 end)
 
-local invisibleToggle = createPlayerToggle(playerPage, nextOrder(), "◈ Invisible", "Local only — others still see you", false, function(v)
+createPlayerToggle(playerPage, nextOrder(), "◈ Invisible", "Local only — others still see you", false, function(v)
     playerState.invisible.active = v
     local char = localPlayer.Character
     if not char then return end
@@ -1722,21 +1669,15 @@ create("TextLabel", {
     LayoutOrder = nextOrder(), ZIndex = 4,
 }, playerPage)
 
--- ── Respawn handler: re-apply active features ──
 localPlayer.CharacterAdded:Connect(function(char)
     task.wait(0.2)
     local hum = char:FindFirstChildOfClass("Humanoid")
     local root = char:FindFirstChild("HumanoidRootPart")
-    -- Speed
-    if playerState.speed.applied and hum then
-        hum.WalkSpeed = playerState.speed.value
-    end
-    -- Jump
+    if playerState.speed.applied and hum then hum.WalkSpeed = playerState.speed.value end
     if playerState.jump.applied and hum then
         hum.UseJumpPower = true
         hum.JumpPower = playerState.jump.value
     end
-    -- Flight
     if playerState.flight.active and root then
         if playerState.flight.bodyVel then pcall(function() playerState.flight.bodyVel:Destroy() end) end
         local bv = Instance.new("BodyVelocity")
@@ -1746,7 +1687,6 @@ localPlayer.CharacterAdded:Connect(function(char)
         bv.Parent = root
         playerState.flight.bodyVel = bv
     end
-    -- Rotation
     if playerState.rotation.active and root then
         if playerState.rotation.bodyAV then pcall(function() playerState.rotation.bodyAV:Destroy() end) end
         local av = Instance.new("BodyAngularVelocity")
@@ -1756,7 +1696,6 @@ localPlayer.CharacterAdded:Connect(function(char)
         av.Parent = root
         playerState.rotation.bodyAV = av
     end
-    -- Swimming
     if playerState.swimming.active and root then
         if playerState.swimming.bodyForce then pcall(function() playerState.swimming.bodyForce:Destroy() end) end
         local bf = Instance.new("BodyForce")
@@ -1765,7 +1704,6 @@ localPlayer.CharacterAdded:Connect(function(char)
         bf.Parent = root
         playerState.swimming.bodyForce = bf
     end
-    -- Invisible
     if playerState.invisible.active then
         playerState.invisible.originals = {}
         for _, part in ipairs(char:GetDescendants()) do
@@ -1775,44 +1713,240 @@ localPlayer.CharacterAdded:Connect(function(char)
             end
         end
     end
-    -- iPad View (camera persists usually, but re-apply anyway)
     if playerState.ipadView.active then
         local cam = workspace.CurrentCamera
         if cam then cam.FieldOfView = 80 end
     end
 end)
 
--- ── Cleanup on re-execute ──
 _G.LYNEX_CLEANUP = function()
-    -- Restore gravity
     if playerState.gravity.applied then
         pcall(function() workspace.Gravity = playerState.gravity.original end)
     end
-    -- Stop flight
     if playerState.flight.conn then pcall(function() playerState.flight.conn:Disconnect() end) end
     if playerState.flight.bodyVel then pcall(function() playerState.flight.bodyVel:Destroy() end) end
-    -- Stop rotation
     if playerState.rotation.bodyAV then pcall(function() playerState.rotation.bodyAV:Destroy() end) end
-    -- Stop swimming
     if playerState.swimming.bodyForce then pcall(function() playerState.swimming.bodyForce:Destroy() end) end
-    -- Stop infinite jump
     if playerState.infiniteJump.conn then pcall(function() playerState.infiniteJump.conn:Disconnect() end) end
-    -- Restore invisible
     if playerState.invisible.active then
         for part, orig in pairs(playerState.invisible.originals) do
             if part and part.Parent then pcall(function() part.Transparency = orig end) end
         end
     end
-    -- Restore FOV
     if playerState.ipadView.active then
         local cam = workspace.CurrentCamera
         if cam then pcall(function() cam.FieldOfView = playerState.ipadView.originalFov or 70 end) end
     end
-    -- Stop spectate
-    if spectate.active then
-        pcall(function() stopSpectating("silent") end)
-    end
+    if spectate.active then pcall(function() stopSpectating("silent") end) end
 end
+
+--==================================================================
+-- 16.6) Auto Fish Page  ◀️ جديد
+--==================================================================
+local AUTO_FISH_URL = "https://raw.githubusercontent.com/coronavip100-max/Auto-fish/refs/heads/main/Auto%20fish"
+
+local autoFishPage = createPage("autofish", true)
+create("UIListLayout", { Padding = UDim.new(0, 10), SortOrder = Enum.SortOrder.LayoutOrder }, autoFishPage)
+create("UIPadding", {
+    PaddingTop = UDim.new(0, 2), PaddingBottom = UDim.new(0, 10), PaddingRight = UDim.new(0, 6),
+}, autoFishPage)
+
+-- ── Header card ──
+local afHeaderCard = create("Frame", {
+    Size = UDim2.new(1, 0, 0, 86),
+    BackgroundColor3 = THEME.BG_CARD, BackgroundTransparency = 0.05,
+    BorderSizePixel = 0, LayoutOrder = 1, ZIndex = 4,
+}, autoFishPage)
+addCorner(12, afHeaderCard); addStroke(THEME.BORDER, 1, 0.15, afHeaderCard)
+
+local afIconFrame = create("Frame", {
+    Size = UDim2.fromOffset(60, 60), Position = UDim2.new(0, 12, 0.5, -30),
+    BackgroundColor3 = THEME.P_MAIN, BorderSizePixel = 0, ZIndex = 5,
+}, afHeaderCard)
+addCorner(30, afIconFrame)
+addStroke(THEME.P_GLOW, 1.5, 0.2, afIconFrame)
+addGradient(afIconFrame, {
+    ColorSequenceKeypoint.new(0, THEME.P_MAIN),
+    ColorSequenceKeypoint.new(1, THEME.P_BRIGHT),
+}, 45)
+create("TextLabel", {
+    Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1,
+    Text = "≋", Font = FONT.Logo, TextSize = 30,
+    TextColor3 = THEME.TX_MAIN, ZIndex = 6,
+}, afIconFrame)
+
+create("TextLabel", {
+    Size = UDim2.new(1, -88, 0, 22), Position = UDim2.new(0, 82, 0, 14),
+    BackgroundTransparency = 1, Text = "Auto Fish",
+    Font = FONT.Logo, TextSize = 16, TextColor3 = THEME.TX_MAIN,
+    TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 5,
+}, afHeaderCard)
+create("TextLabel", {
+    Size = UDim2.new(1, -88, 0, 40), Position = UDim2.new(0, 82, 0, 38),
+    BackgroundTransparency = 1,
+    Text = "Automatically fish for you in supported games. Load the external script to activate.",
+    Font = FONT.Regular, TextSize = 10, TextColor3 = THEME.TX_DIM,
+    TextXAlignment = Enum.TextXAlignment.Left, TextWrapped = true, ZIndex = 5,
+}, afHeaderCard)
+
+-- ── Action card ──
+local afActionCard = create("Frame", {
+    Size = UDim2.new(1, 0, 0, 114),
+    BackgroundColor3 = THEME.BG_CARD, BackgroundTransparency = 0.05,
+    BorderSizePixel = 0, LayoutOrder = 2, ZIndex = 4,
+}, autoFishPage)
+addCorner(12, afActionCard); addStroke(THEME.BORDER, 1, 0.15, afActionCard)
+
+local afStatus = create("TextLabel", {
+    Size = UDim2.new(1, -24, 0, 18), Position = UDim2.new(0, 12, 0, 10),
+    BackgroundTransparency = 1, Text = "⏸  Status: Idle",
+    Font = FONT.Medium, TextSize = 11, TextColor3 = THEME.TX_DIM,
+    TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 5,
+}, afActionCard)
+
+local afLoadBtn = create("TextButton", {
+    Size = UDim2.new(1, -24, 0, 48), Position = UDim2.new(0, 12, 0, 36),
+    BackgroundColor3 = THEME.P_MAIN, AutoButtonColor = false,
+    Text = "◈  Load Auto Fish Script",
+    Font = FONT.Bold, TextSize = 14, TextColor3 = THEME.TX_MAIN,
+    TextScaled = false, ZIndex = 5,
+}, afActionCard)
+addCorner(10, afLoadBtn)
+local afLoadStroke = addStroke(THEME.P_GLOW, 2, 0.2, afLoadBtn)
+addGradient(afLoadBtn, {
+    ColorSequenceKeypoint.new(0, THEME.P_MAIN),
+    ColorSequenceKeypoint.new(0.5, THEME.P_BRIGHT),
+    ColorSequenceKeypoint.new(1, THEME.P_MAIN),
+}, 90)
+
+create("TextLabel", {
+    Size = UDim2.new(1, -24, 0, 16), Position = UDim2.new(0, 12, 0, 92),
+    BackgroundTransparency = 1,
+    Text = "⚠ Requires HTTP + loadstring (Delta / Fluxus / Synapse)",
+    Font = FONT.Regular, TextSize = 9, TextColor3 = THEME.TX_SUBTLE,
+    TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 5,
+}, afActionCard)
+
+-- ── Instructions card ──
+local afInstrCard = create("Frame", {
+    Size = UDim2.new(1, 0, 0, 146),
+    BackgroundColor3 = THEME.BG_CARD, BackgroundTransparency = 0.05,
+    BorderSizePixel = 0, LayoutOrder = 3, ZIndex = 4,
+}, autoFishPage)
+addCorner(12, afInstrCard); addStroke(THEME.BORDER, 1, 0.15, afInstrCard)
+
+create("TextLabel", {
+    Size = UDim2.new(1, -20, 0, 22), Position = UDim2.new(0, 12, 0, 8),
+    BackgroundTransparency = 1, Text = "✦  INSTRUCTIONS",
+    Font = FONT.Bold, TextSize = 12, TextColor3 = THEME.P_GLOW,
+    TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 5,
+}, afInstrCard)
+create("TextLabel", {
+    Size = UDim2.new(1, -20, 0, 34), Position = UDim2.new(0, 12, 0, 36),
+    BackgroundTransparency = 1,
+    Text = "Press the button above to load and run the Auto Fish script.",
+    Font = FONT.Regular, TextSize = 11, TextColor3 = THEME.TX_DIM,
+    TextXAlignment = Enum.TextXAlignment.Left, TextWrapped = true, ZIndex = 5,
+}, afInstrCard)
+create("TextLabel", {
+    Size = UDim2.new(1, -20, 0, 40), Position = UDim2.new(0, 12, 0, 76),
+    BackgroundTransparency = 1,
+    Text = "اضغط على الزر أعلاه لتحميل وتشغيل سكربت الصيد التلقائي.",
+    Font = FONT.Regular, TextSize = 11, TextColor3 = THEME.TX_DIM,
+    TextXAlignment = Enum.TextXAlignment.Left, TextWrapped = true, ZIndex = 5,
+}, afInstrCard)
+create("TextLabel", {
+    Size = UDim2.new(1, -20, 0, 24), Position = UDim2.new(0, 12, 1, -28),
+    BackgroundTransparency = 1,
+    Text = "⚠ Loading is disabled in Studio without HttpEnabled. Use a real executor.",
+    Font = FONT.Regular, TextSize = 9, TextColor3 = THEME.TX_SUBTLE,
+    TextXAlignment = Enum.TextXAlignment.Left, TextWrapped = true, ZIndex = 5,
+}, afInstrCard)
+
+-- ── Loader logic ──
+local loadBusy = false
+
+local function fetchUrl(url)
+    -- Try common executor HTTP APIs
+    if typeof(fluxus) == "table" and typeof(fluxus.request) == "function" then
+        local ok, resp = pcall(fluxus.request, { Url = url, Method = "GET" })
+        if ok and resp and resp.Body then return resp.Body end
+    end
+    if typeof(syn) == "table" and typeof(syn.request) == "function" then
+        local ok, resp = pcall(syn.request, { Url = url, Method = "GET" })
+        if ok and resp and resp.Body then return resp.Body end
+    end
+    if typeof(http_request) == "function" then
+        local ok, resp = pcall(http_request, { Url = url, Method = "GET" })
+        if ok and resp and resp.Body then return resp.Body end
+    end
+    if typeof(request) == "function" then
+        local ok, resp = pcall(request, { Url = url, Method = "GET" })
+        if ok and resp and resp.Body then return resp.Body end
+    end
+    -- HttpService fallback (rarely works in executors)
+    local ok, body = pcall(function()
+        return game:GetService("HttpService"):GetAsync(url)
+    end)
+    if ok and body then return body end
+    return nil
+end
+
+local function loadAutoFishScript()
+    local body = fetchUrl(AUTO_FISH_URL)
+    if not body then
+        return false, "Download failed (no HTTP executor)"
+    end
+    if typeof(loadstring) ~= "function" then
+        return false, "loadstring unavailable"
+    end
+    local fn, compileErr = loadstring(body)
+    if not fn then
+        return false, "Compile error: " .. tostring(compileErr)
+    end
+    local ok, runErr = pcall(fn)
+    if not ok then
+        return false, "Runtime error: " .. tostring(runErr)
+    end
+    return true
+end
+
+local function setAfStatus(text, color)
+    afStatus.Text = text
+    afStatus.TextColor3 = color or THEME.TX_DIM
+end
+
+afLoadBtn.MouseButton1Click:Connect(function()
+    if loadBusy then return end
+    loadBusy = true
+
+    local origText = "◈  Load Auto Fish Script"
+    local origBg = THEME.P_MAIN
+
+    afLoadBtn.Text = "⏳  Loading…"
+    afLoadBtn.BackgroundColor3 = THEME.BG_CARD_HI
+    setAfStatus("⏳  Fetching script…", THEME.TX_DIM)
+
+    task.spawn(function()
+        local ok, errMsg = pcall(loadAutoFishScript)
+        task.wait(0.25)
+
+        loadBusy = false
+        afLoadBtn.Text = origText
+        afLoadBtn.BackgroundColor3 = origBg
+
+        if ok and (errMsg ~= false) then
+            setAfStatus("✓  Script executed successfully", THEME.OK)
+            showToast("✓  Auto Fish loaded")
+        else
+            local reason = (errMsg == false) and "Unknown error" or tostring(errMsg)
+            setAfStatus("✕  " .. reason, THEME.DANGER_HI)
+            showToast("✕  " .. reason)
+        end
+    end)
+end)
+
+styleActionButton(afLoadBtn, afLoadStroke)
 
 --==================================================================
 -- 17) Floating button
@@ -1897,7 +2031,7 @@ local function fadeTo(value, duration, style, direction, onDone)
 end
 
 --==================================================================
--- 19) Glow Pulse
+-- 19) Glow
 --==================================================================
 task.spawn(function()
     while screenGui and screenGui.Parent do
@@ -2101,6 +2235,7 @@ local function showWindow()
         end
     end)
     if spectate.active then updateSpectateIndicator() end
+    updateServerInfo()  -- refresh players count when reopening
 end
 closeBtn.MouseButton1Click:Connect(hideWindow)
 floatingBtn.MouseButton1Click:Connect(showWindow)
@@ -2206,4 +2341,4 @@ do
     end
 end
 
-print("[LYNEX HUB v2.8] ✦ Ready — Player tab added")
+print("[LYNEX HUB v2.9] ✦ Ready — Server Info + Auto Fish tab")
